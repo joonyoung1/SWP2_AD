@@ -1,6 +1,8 @@
-from PyQt5.QtWidgets import QMainWindow, QApplication, QAction, QFileDialog, QColorDialog
+from PyQt5.QtWidgets import QMainWindow, QApplication, QAction, QWidgetAction, QFileDialog, QColorDialog, QWidget
+from PyQt5.QtWidgets import QSlider
 from PyQt5.QtGui import QImage, QPainter, QPen, QTransform
 from PyQt5.QtCore import Qt, QPoint
+from brushsizepicker import BrushSizePicker
 import sys
 import requests
 from bs4 import BeautifulSoup
@@ -33,6 +35,7 @@ class Window(QMainWindow):
         mainMenu = self.menuBar()
         fileMenu = mainMenu.addMenu("File")
         brushSize = mainMenu.addMenu("Brush Size")
+        brushSize.aboutToHide.connect(self.test)
         rotate = mainMenu.addMenu("Rotate")
         colorPicker = QAction('Color Picker', self)
         colorPicker.triggered.connect(self.pickColor)
@@ -60,9 +63,11 @@ class Window(QMainWindow):
         brushSize.addAction(sevenpxAction)
         sevenpxAction.triggered.connect(self.sevenPixel)
 
-        ninepxAction = QAction("9px", self)
-        brushSize.addAction(ninepxAction)
-        ninepxAction.triggered.connect(self.ninePixel)
+        sizePickAction = QWidgetAction(self)
+        self.sizeSlider = BrushSizePicker(1, 200, self.brushSize)
+        sizePickAction.setDefaultWidget(self.sizeSlider)
+        brushSize.addAction(sizePickAction)
+        sizePickAction.changed.connect(self.test)
 
         rotate90Action = QAction("90", self)
         rotate.addAction(rotate90Action)
@@ -72,6 +77,10 @@ class Window(QMainWindow):
         if event.button() == Qt.LeftButton:
             self.drawing = True
             self.lastPoint = event.pos()
+            painter = QPainter(self.image)
+            painter.setPen(QPen(self.brushColor, self.brushSize, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+            painter.drawPoint(event.pos())
+            self.update()
 
     def mouseMoveEvent(self, event):
         if self.drawing:
@@ -113,14 +122,14 @@ class Window(QMainWindow):
     def ninePixel(self):
         self.brushSize = 9
 
+    def test(self):
+        self.brushSize = self.sizeSlider.getSize()
+
     def rotate90(self):
-        print(self.pos())
         transform = QTransform()
         transform.rotate(90)
         self.image = self.image.transformed(transform)
         self.setGeometry(self.pos().x(), self.pos().y() + 30, self.image.width(), self.image.height())
-        self.update()
-        print('transformed', self.image.size())
 
 
     def pickColor(self):
