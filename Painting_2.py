@@ -1,10 +1,9 @@
-from PyQt5.QtWidgets import QMainWindow, QApplication, QMenu, QMenuBar, QAction, QFileDialog
-from PyQt5.QtGui import QImage, QPainter, QPen, QBrush, QPixmap, QTransform
-from PyQt5.QtCore import Qt, QPoint, pyqtSignal, QUrl
+from PyQt5.QtWidgets import QMainWindow, QApplication, QAction, QFileDialog, QColorDialog
+from PyQt5.QtGui import QImage, QPainter, QPen, QTransform
+from PyQt5.QtCore import Qt, QPoint
 import sys
 import requests
 from bs4 import BeautifulSoup
-from pprint import pprint
 import urllib.request
 
 
@@ -34,7 +33,10 @@ class Window(QMainWindow):
         mainMenu = self.menuBar()
         fileMenu = mainMenu.addMenu("File")
         brushSize = mainMenu.addMenu("Brush Size")
-        brushColor = mainMenu.addMenu("Brush Color")
+        rotate = mainMenu.addMenu("Rotate")
+        colorPicker = QAction('Color Picker', self)
+        colorPicker.triggered.connect(self.pickColor)
+        mainMenu.addAction(colorPicker)
 
         saveAction = QAction("save", self)
         saveAction.setShortcut("Ctrl+S")
@@ -62,30 +64,9 @@ class Window(QMainWindow):
         brushSize.addAction(ninepxAction)
         ninepxAction.triggered.connect(self.ninePixel)
 
-        blackAction = QAction("Black", self)
-        blackAction.setShortcut("Ctrl+B")
-        brushColor.addAction(blackAction)
-        blackAction.triggered.connect(self.blackColor)
-
-        whitekAction = QAction("White", self)
-        whitekAction.setShortcut("Ctrl+W")
-        brushColor.addAction(whitekAction)
-        whitekAction.triggered.connect(self.whiteColor)
-
-        redAction = QAction("Red", self)
-        redAction.setShortcut("Ctrl+R")
-        brushColor.addAction(redAction)
-        redAction.triggered.connect(self.redColor)
-
-        greenAction = QAction("Green", self)
-        greenAction.setShortcut("Ctrl+G")
-        brushColor.addAction(greenAction)
-        greenAction.triggered.connect(self.greenColor)
-
-        yellowAction = QAction("Yellow", self)
-        yellowAction.setShortcut("Ctrl+Y")
-        brushColor.addAction(yellowAction)
-        yellowAction.triggered.connect(self.yellowColor)
+        rotate90Action = QAction("90", self)
+        rotate.addAction(rotate90Action)
+        rotate90Action.triggered.connect(self.rotate90)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -101,7 +82,6 @@ class Window(QMainWindow):
             self.update()
 
     def mouseReleaseEvent(self, event):
-
         if event.button() == Qt.LeftButton:
             self.drawing = False
 
@@ -133,25 +113,18 @@ class Window(QMainWindow):
     def ninePixel(self):
         self.brushSize = 9
 
-    def blackColor(self):
-        self.brushColor = Qt.black
-
-    def whiteColor(self):
-        self.brushColor = Qt.white
-
-    def redColor(self):
-        self.brushColor = Qt.red
-
-    def greenColor(self):
-        self.brushColor = Qt.green
-
-    def yellowColor(self):
-        # self.brushColor = Qt.yellow
+    def rotate90(self):
+        print(self.pos())
         transform = QTransform()
-        self.image.scaled(self.image.height(), self.image.width())
         transform.rotate(90)
         self.image = self.image.transformed(transform)
+        self.setGeometry(self.pos().x(), self.pos().y() + 30, self.image.width(), self.image.height())
         self.update()
+        print('transformed', self.image.size())
+
+
+    def pickColor(self):
+        self.brushColor = QColorDialog.getColor()
 
     def resizeEvent(self, e):
         resizedImage = QImage(e.size(), QImage.Format_RGB32)
@@ -159,7 +132,6 @@ class Window(QMainWindow):
         painter = QPainter(resizedImage)
         painter.drawImage(self.image.rect(), self.image, self.image.rect())
         self.image = resizedImage
-
 
     def dragEnterEvent(self, e):
         m = e.mimeData()
