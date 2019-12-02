@@ -1,8 +1,8 @@
-from PyQt5.QtWidgets import QMainWindow, QApplication, QAction, QWidgetAction, QFileDialog, QColorDialog, QWidget
-from PyQt5.QtWidgets import QSlider
+from PyQt5.QtWidgets import QMainWindow, QApplication, QAction, QWidgetAction, QFileDialog, QColorDialog
 from PyQt5.QtGui import QImage, QPainter, QPen, QTransform
 from PyQt5.QtCore import Qt, QPoint
 from brushsizepicker import BrushSizePicker
+from transaction import Transaction
 import sys
 import requests
 from bs4 import BeautifulSoup
@@ -35,7 +35,7 @@ class Window(QMainWindow):
         mainMenu = self.menuBar()
         fileMenu = mainMenu.addMenu("File")
         brushSize = mainMenu.addMenu("Brush Size")
-        brushSize.aboutToHide.connect(self.test)
+        brushSize.aboutToHide.connect(self.getSize)
         rotate = mainMenu.addMenu("Rotate")
         colorPicker = QAction('Color Picker', self)
         colorPicker.triggered.connect(self.pickColor)
@@ -50,6 +50,16 @@ class Window(QMainWindow):
         clearAction.setShortcut("Ctrl+C")
         fileMenu.addAction(clearAction)
         clearAction.triggered.connect(self.clear)
+
+        undoAction = QAction("undo", self)
+        undoAction.setShortcut("Ctrl+Z")
+        fileMenu.addAction(undoAction)
+        undoAction.triggered.connect(self.undo)
+
+        redoAction = QAction("redo", self)
+        redoAction.setShortcut("Ctrl+Shift+Z")
+        fileMenu.addAction(redoAction)
+        redoAction.triggered.connect(self.redo)
 
         threepxAction = QAction("3px", self)
         brushSize.addAction(threepxAction)
@@ -67,11 +77,12 @@ class Window(QMainWindow):
         self.sizeSlider = BrushSizePicker(1, 200, self.brushSize)
         sizePickAction.setDefaultWidget(self.sizeSlider)
         brushSize.addAction(sizePickAction)
-        sizePickAction.changed.connect(self.test)
 
         rotate90Action = QAction("90", self)
         rotate.addAction(rotate90Action)
         rotate90Action.triggered.connect(self.rotate90)
+
+        self.transaction = Transaction(20, self.image)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -93,6 +104,7 @@ class Window(QMainWindow):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.drawing = False
+        self.transaction.addData(self.image.copy(self.image.rect()))
 
     def paintEvent(self, event):
         canvasPainter = QPainter(self)
@@ -110,6 +122,18 @@ class Window(QMainWindow):
         self.image.fill(Qt.white)
         self.update()
 
+    def undo(self):
+        data = self.transaction.undo()
+        if data:
+            self.image = data
+            self.update()
+
+    def redo(self):
+        data = self.transaction.redo()
+        if data:
+            self.image = data
+            self.update()
+
     def threePixel(self):
         self.brushSize = 3
 
@@ -122,7 +146,7 @@ class Window(QMainWindow):
     def ninePixel(self):
         self.brushSize = 9
 
-    def test(self):
+    def getSize(self):
         self.brushSize = self.sizeSlider.getSize()
 
     def rotate90(self):
