@@ -15,8 +15,8 @@ class Window(QMainWindow):
         super().__init__()
 
         title = "Paint Application"
-        top = 400
-        left = 400
+        top = 100
+        left = 100
         width = 800
         height = 600
 
@@ -36,7 +36,7 @@ class Window(QMainWindow):
         fileMenu = mainMenu.addMenu("File")
         brushSize = mainMenu.addMenu("Brush Size")
         brushSize.aboutToHide.connect(self.getSize)
-        rotate = mainMenu.addMenu("Rotate")
+        modify = mainMenu.addMenu("Modify")
         colorPicker = QAction('Color Picker', self)
         colorPicker.triggered.connect(self.pickColor)
         mainMenu.addAction(colorPicker)
@@ -45,6 +45,11 @@ class Window(QMainWindow):
         saveAction.setShortcut("Ctrl+S")
         fileMenu.addAction(saveAction)
         saveAction.triggered.connect(self.save)
+
+        loadAction = QAction("import", self)
+        loadAction.setShortcut("Ctrl+O")
+        fileMenu.addAction(loadAction)
+        loadAction.triggered.connect(self.load)
 
         clearAction = QAction("clear", self)
         clearAction.setShortcut("Ctrl+C")
@@ -61,28 +66,16 @@ class Window(QMainWindow):
         fileMenu.addAction(redoAction)
         redoAction.triggered.connect(self.redo)
 
-        threepxAction = QAction("3px", self)
-        brushSize.addAction(threepxAction)
-        threepxAction.triggered.connect(self.threePixel)
-
-        fivepxAction = QAction("5px", self)
-        brushSize.addAction(fivepxAction)
-        fivepxAction.triggered.connect(self.fivePixel)
-
-        sevenpxAction = QAction("7px", self)
-        brushSize.addAction(sevenpxAction)
-        sevenpxAction.triggered.connect(self.sevenPixel)
-
         sizePickAction = QWidgetAction(self)
         self.sizeSlider = BrushSizePicker(1, 200, self.brushSize)
         sizePickAction.setDefaultWidget(self.sizeSlider)
         brushSize.addAction(sizePickAction)
 
         rotate90Action = QAction("90", self)
-        rotate.addAction(rotate90Action)
+        modify.addAction(rotate90Action)
         rotate90Action.triggered.connect(self.rotate90)
 
-        self.transaction = Transaction(20, self.image)
+        self.transaction = Transaction(20, self.image.copy(self.image.rect()))
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -118,6 +111,14 @@ class Window(QMainWindow):
             return
         self.image.save(filePath)
 
+    def load(self):
+        filePath, type = QFileDialog.getOpenFileName(self, "Import Image", "",
+                                               "PNG(*.png);;JPEG(*.jpg *.jpeg);;All Files(*.*) ")
+        newImage = QImage(filePath)
+        self.resize(newImage.width(), newImage.height())
+        self.image = newImage
+        self.transaction.addData(self.image.copy(self.image.rect()))
+
     def clear(self):
         self.image.fill(Qt.white)
         self.update()
@@ -125,26 +126,16 @@ class Window(QMainWindow):
     def undo(self):
         data = self.transaction.undo()
         if data:
-            self.image = data
+            self.resize(data.width(), data.height())
+            self.image = data.copy()
             self.update()
 
     def redo(self):
         data = self.transaction.redo()
         if data:
-            self.image = data
+            self.resize(data.width(), data.height())
+            self.image = data.copy()
             self.update()
-
-    def threePixel(self):
-        self.brushSize = 3
-
-    def fivePixel(self):
-        self.brushSize = 5
-
-    def sevenPixel(self):
-        self.brushSize = 7
-
-    def ninePixel(self):
-        self.brushSize = 9
 
     def getSize(self):
         self.brushSize = self.sizeSlider.getSize()
@@ -154,7 +145,7 @@ class Window(QMainWindow):
         transform.rotate(90)
         self.image = self.image.transformed(transform)
         self.setGeometry(self.pos().x(), self.pos().y() + 30, self.image.width(), self.image.height())
-
+        self.transaction.addData(self.image.copy(self.image.rect()))
 
     def pickColor(self):
         self.brushColor = QColorDialog.getColor()
@@ -165,6 +156,7 @@ class Window(QMainWindow):
         painter = QPainter(resizedImage)
         painter.drawImage(self.image.rect(), self.image, self.image.rect())
         self.image = resizedImage
+        self.update()
 
     def dragEnterEvent(self, e):
         m = e.mimeData()
@@ -191,6 +183,7 @@ class Window(QMainWindow):
         self.resize(newImage.width(), newImage.height())
         self.image = newImage
         self.update()
+        self.transaction.addData(self.image.copy(self.image.rect()))
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
