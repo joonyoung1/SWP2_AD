@@ -11,7 +11,7 @@ class Transaction:
 
     def addData(self, data):
         if self.position != self.maxPosition:
-            self.dataBase = deque(itertools.islice(self.dataBase.copy(), 0, self.position + 1), maxlen=self.maxPosition + 1)
+            self.dataBase = deque(itertools.islice(self.dataBase, 0, self.position + 1), maxlen=self.maxPosition + 1)
             self.position += 1
         self.dataBase.append(data)
 
