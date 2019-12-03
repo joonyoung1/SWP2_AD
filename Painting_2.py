@@ -4,9 +4,7 @@ from PyQt5.QtCore import Qt, QPoint
 from brushsizepicker import BrushSizePicker
 from transaction import Transaction
 import sys
-import requests
-from bs4 import BeautifulSoup
-import urllib.request
+from urllib import parse, request
 
 
 class Window(QMainWindow):
@@ -170,15 +168,11 @@ class Window(QMainWindow):
         if myUrl.isLocalFile():
             newImage = QImage(myUrl.toLocalFile())
         else:
-            html = requests.get(myUrl.toString())
-            soup = BeautifulSoup(html.text, 'html.parser')
-            html.close()
-
-            data = soup.findAll('div', {'id': 'il_ic'})
-            result = (data[0].findAll('img'))
-            url = result[0]['src']
+            decoded = parse.parse_qs(myUrl.toString())
+            hdr = {'User-Agent':'Mozilla/5.0'}
+            req = request.Request(decoded['https://www.google.com/imgres?imgurl'][0], headers=hdr)
             newImage = QImage()
-            newImage.loadFromData(urllib.request.urlopen(url).read())
+            newImage.loadFromData(request.urlopen(req).read())
 
         self.resize(newImage.width(), newImage.height())
         self.image = newImage
