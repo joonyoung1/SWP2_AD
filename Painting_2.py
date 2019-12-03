@@ -3,7 +3,7 @@ from PyQt5.QtGui import QImage, QPainter, QPen, QTransform
 from PyQt5.QtCore import Qt, QPoint
 from brushsizepicker import BrushSizePicker
 from transaction import Transaction
-import sys
+import sys, random
 from urllib import parse, request
 
 
@@ -29,49 +29,63 @@ class Window(QMainWindow):
         self.brushSize = 2
         self.brushColor = Qt.black
         self.lastPoint = QPoint()
+        self.brushStyle = 'Pen'
 
         mainMenu = self.menuBar()
         fileMenu = mainMenu.addMenu("File")
-        brushSize = mainMenu.addMenu("Brush Size")
-        brushSize.aboutToHide.connect(self.getSize)
         modify = mainMenu.addMenu("Modify")
+        brushStyle = mainMenu.addMenu("Brush Style")
+        brushSize = mainMenu.addMenu("Brush Size")
         colorPicker = QAction('Color Picker', self)
-        colorPicker.triggered.connect(self.pickColor)
-        mainMenu.addAction(colorPicker)
 
-        saveAction = QAction("save", self)
+        saveAction = QAction("Save", self)
         saveAction.setShortcut("Ctrl+S")
         fileMenu.addAction(saveAction)
         saveAction.triggered.connect(self.save)
 
-        loadAction = QAction("import", self)
+        loadAction = QAction("Load", self)
         loadAction.setShortcut("Ctrl+O")
         fileMenu.addAction(loadAction)
         loadAction.triggered.connect(self.load)
 
-        clearAction = QAction("clear", self)
+        clearAction = QAction("Clear", self)
         clearAction.setShortcut("Ctrl+C")
         fileMenu.addAction(clearAction)
         clearAction.triggered.connect(self.clear)
 
-        undoAction = QAction("undo", self)
+        undoAction = QAction("Undo", self)
         undoAction.setShortcut("Ctrl+Z")
         fileMenu.addAction(undoAction)
         undoAction.triggered.connect(self.undo)
 
-        redoAction = QAction("redo", self)
+        redoAction = QAction("Redo", self)
         redoAction.setShortcut("Ctrl+Shift+Z")
         fileMenu.addAction(redoAction)
         redoAction.triggered.connect(self.redo)
 
+        for angle in [90, 180, 270]:
+            rotateAction = QAction("Rotate " + str(angle), self)
+            rotateAction.triggered.connect(self.rotate)
+            modify.addAction(rotateAction)
+
+        for flip in ['Vertically', 'Horizontally']:
+            flipAction = QAction("filp " + flip, self)
+            flipAction.triggered.connect(self.flip)
+            modify.addAction(flipAction)
+
+        for brushType in ['Pen', 'Eraser', 'Spray']:
+            brushAction = QAction(brushType, self)
+            brushAction.triggered.connect(self.changeBrush)
+            brushStyle.addAction(brushAction)
+
+        brushSize.aboutToHide.connect(self.getSize)
         sizePickAction = QWidgetAction(self)
         self.sizeSlider = BrushSizePicker(1, 200, self.brushSize)
         sizePickAction.setDefaultWidget(self.sizeSlider)
         brushSize.addAction(sizePickAction)
 
-        rotate90Action = QAction("90", self)
-        modify.addAction(rotate90Action)
-        rotate90Action.triggered.connect(self.rotate90)
+        colorPicker.triggered.connect(self.pickColor)
+        mainMenu.addAction(colorPicker)
 
         self.transaction = Transaction(20, self.image.copy(self.image.rect()))
 
@@ -80,15 +94,29 @@ class Window(QMainWindow):
             self.drawing = True
             self.lastPoint = event.pos()
             painter = QPainter(self.image)
-            painter.setPen(QPen(self.brushColor, self.brushSize, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-            painter.drawPoint(event.pos())
+            if self.brushStyle == 'Pen':
+                painter.setPen(QPen(self.brushColor, self.brushSize, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+                painter.drawPoint(event.pos())
+            elif self.brushStyle == 'Spray':
+                painter.setPen(QPen(self.brushColor, 1))
+                for n in range(self.brushSize**2 // 20):
+                    x = random.gauss(0, self.brushSize // 4)
+                    y = random.gauss(0, self.brushSize // 4)
+                    painter.drawPoint(event.x() + x, event.y() + y)
             self.update()
 
     def mouseMoveEvent(self, event):
         if self.drawing:
             painter = QPainter(self.image)
-            painter.setPen(QPen(self.brushColor, self.brushSize, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-            painter.drawLine(self.lastPoint, event.pos())
+            if self.brushStyle == 'Pen':
+                painter.setPen(QPen(self.brushColor, self.brushSize, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+                painter.drawLine(self.lastPoint, event.pos())
+            elif self.brushStyle == 'Spray':
+                painter.setPen(QPen(self.brushColor, 1))
+                for n in range(self.brushSize**2 // 20):
+                    x = random.gauss(0, self.brushSize // 4)
+                    y = random.gauss(0, self.brushSize // 4)
+                    painter.drawPoint(event.x() + x, event.y() + y)
             self.lastPoint = event.pos()
             self.update()
 
@@ -138,12 +166,27 @@ class Window(QMainWindow):
     def getSize(self):
         self.brushSize = self.sizeSlider.getSize()
 
-    def rotate90(self):
+    def rotate(self):
+        angle = int(list(self.sender().text().split())[1])
         transform = QTransform()
-        transform.rotate(90)
+        transform.rotate(angle)
         self.image = self.image.transformed(transform)
         self.setGeometry(self.pos().x(), self.pos().y() + 30, self.image.width(), self.image.height())
         self.transaction.addData(self.image.copy(self.image.rect()))
+        self.update()
+
+    def flip(self):
+        option = list(self.sender().text().split())[1]
+        if option == 'Vertically':
+            self.image = self.image.mirrored(False, True)
+        else:
+            self.image = self.image.mirrored(True, False)
+        self.update()
+
+    def changeBrush(self):
+        brushType = self.sender().text()
+        self.brushStyle = brushType
+        print(self.brushStyle)
 
     def pickColor(self):
         self.brushColor = QColorDialog.getColor()
@@ -169,7 +212,7 @@ class Window(QMainWindow):
             newImage = QImage(myUrl.toLocalFile())
         else:
             decoded = parse.parse_qs(myUrl.toString())
-            hdr = {'User-Agent':'Mozilla/5.0'}
+            hdr = {'User-Agent': 'Mozilla/5.0'}
             req = request.Request(decoded['https://www.google.com/imgres?imgurl'][0], headers=hdr)
             newImage = QImage()
             newImage.loadFromData(request.urlopen(req).read())
