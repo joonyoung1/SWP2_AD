@@ -1,10 +1,13 @@
 from PyQt5.QtWidgets import QMainWindow, QApplication, QAction, QWidgetAction, QFileDialog, QColorDialog
-from PyQt5.QtGui import QImage, QPainter, QPen, QTransform
+from PyQt5.QtGui import QImage, QPainter, QPen, QTransform, QPolygon
 from PyQt5.QtCore import Qt, QPoint
 from brushsizepicker import BrushSizePicker
 from transaction import Transaction
-import sys, random
+from figuresetting import FigureSetting
+from imagefromweb import ImageFromWeb
+import sys
 from urllib import parse, request
+import random
 
 
 class Window(QMainWindow):
@@ -30,6 +33,8 @@ class Window(QMainWindow):
         self.brushColor = Qt.black
         self.lastPoint = QPoint()
         self.brushStyle = 'Pen'
+        self.fullFill = False
+        self.backUp = None
 
         mainMenu = self.menuBar()
         fileMenu = mainMenu.addMenu("File")
@@ -37,31 +42,20 @@ class Window(QMainWindow):
         brushStyle = mainMenu.addMenu("Brush Style")
         brushSize = mainMenu.addMenu("Brush Size")
         colorPicker = QAction('Color Picker', self)
+        drawingMenu = mainMenu.addMenu("Drawing")
+        imageSearch = QAction('Image Search', self)
 
-        saveAction = QAction("Save", self)
-        saveAction.setShortcut("Ctrl+S")
-        fileMenu.addAction(saveAction)
-        saveAction.triggered.connect(self.save)
+        fileMenuSetting = [{'name': 'Save', 'shortcut': 'Ctrl+S', 'callback': self.save},
+                           {'name': 'Load', 'shortcut': 'Ctrl+O', 'callback': self.load},
+                           {'name': 'Clear', 'shortcut': 'Ctrl+C', 'callback': self.clear},
+                           {'name': 'Undo', 'shortcut': 'Ctrl+Z', 'callback': self.undoAndRedo},
+                           {'name': 'Redo', 'shortcut': 'Ctrl+Shift+Z', 'callback': self.undoAndRedo}]
 
-        loadAction = QAction("Load", self)
-        loadAction.setShortcut("Ctrl+O")
-        fileMenu.addAction(loadAction)
-        loadAction.triggered.connect(self.load)
-
-        clearAction = QAction("Clear", self)
-        clearAction.setShortcut("Ctrl+C")
-        fileMenu.addAction(clearAction)
-        clearAction.triggered.connect(self.clear)
-
-        undoAction = QAction("Undo", self)
-        undoAction.setShortcut("Ctrl+Z")
-        fileMenu.addAction(undoAction)
-        undoAction.triggered.connect(self.undo)
-
-        redoAction = QAction("Redo", self)
-        redoAction.setShortcut("Ctrl+Shift+Z")
-        fileMenu.addAction(redoAction)
-        redoAction.triggered.connect(self.redo)
+        for setting in fileMenuSetting:
+            action = QAction(setting['name'], self)
+            action.setShortcut(setting['shortcut'])
+            action.triggered.connect(setting['callback'])
+            fileMenu.addAction(action)
 
         for angle in [90, 180, 270]:
             rotateAction = QAction("Rotate " + str(angle), self)
@@ -78,6 +72,17 @@ class Window(QMainWindow):
             brushAction.triggered.connect(self.changeBrush)
             brushStyle.addAction(brushAction)
 
+        drawingMenu.aboutToHide.connect(self.getDrawingOption)
+        optionSettingAction = QWidgetAction(self)
+        self.figureSetting = FigureSetting()
+        optionSettingAction.setDefaultWidget(self.figureSetting)
+        drawingMenu.addAction(optionSettingAction)
+
+        for figure in ['Rectangle', 'Circle', 'Line']:
+            drawAction = QAction(figure, self)
+            drawAction.triggered.connect(self.changeBrush)
+            drawingMenu.addAction(drawAction)
+
         brushSize.aboutToHide.connect(self.getSize)
         sizePickAction = QWidgetAction(self)
         self.sizeSlider = BrushSizePicker(1, 200, self.brushSize)
@@ -87,40 +92,99 @@ class Window(QMainWindow):
         colorPicker.triggered.connect(self.pickColor)
         mainMenu.addAction(colorPicker)
 
+        imageSearch.triggered.connect(self.searchImage)
+        mainMenu.addAction(imageSearch)
+
         self.transaction = Transaction(20, self.image.copy(self.image.rect()))
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            self.drawing = True
-            self.lastPoint = event.pos()
-            painter = QPainter(self.image)
-            if self.brushStyle == 'Pen':
-                painter.setPen(QPen(self.brushColor, self.brushSize, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-                painter.drawPoint(event.pos())
-            elif self.brushStyle == 'Spray':
-                painter.setPen(QPen(self.brushColor, 1))
-                for n in range(self.brushSize**2 // 20):
-                    x = random.gauss(0, self.brushSize // 4)
-                    y = random.gauss(0, self.brushSize // 4)
-                    painter.drawPoint(event.x() + x, event.y() + y)
-            self.update()
+            if self.brushStyle in ['Pen', 'Eraser', 'Spray']:
+                self.drawing = True
+                self.lastPoint = event.pos()
+                painter = QPainter(self.image)
+                if self.brushStyle == 'Pen':
+                    painter.setPen(QPen(self.brushColor, self.brushSize, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+                    painter.drawPoint(event.pos())
+                elif self.brushStyle == 'Spray':
+                    painter.setPen(QPen(self.brushColor, 1))
+                    for n in range(self.brushSize**2 // 10):
+                        x = random.gauss(0, self.brushSize // 4)
+                        y = random.gauss(0, self.brushSize // 4)
+                        painter.drawPoint(event.x() + x, event.y() + y)
+                elif self.brushStyle == 'Eraser':
+                    painter.setBrush(Qt.white)
+                    painter.setPen(Qt.white)
+                    x = event.x() - self.brushSize / 2
+                    y = event.y() - self.brushSize / 2
+                    dx = dy = self.brushSize
+                    painter.drawRect(x, y, dx, dy)
+                self.update()
+            elif self.brushStyle in ['Rectangle', 'Circle', 'Line']:
+                self.drawing = True
+                self.lastPoint = event.pos()
+                self.backUp = self.image.copy(self.image.rect())
 
     def mouseMoveEvent(self, event):
         if self.drawing:
-            painter = QPainter(self.image)
-            if self.brushStyle == 'Pen':
+            # painter = QPainter(self.image)
+            # image = QImage('/home/user/사진/autumn_leaves_PNG3611.png')
+            # image = image.scaledToHeight(self.brushSize)
+            # transform = QTransform()
+            # transform.rotate(random.randint(0, 360))
+            # image = image.transformed(transform)
+            # painter.drawImage(event.x() - image.width() / 2, event.y() - image.height() / 2, image)
+            # self.update()
+            if self.brushStyle in ['Pen', 'Eraser', 'Spray']:
+                painter = QPainter(self.image)
+                if self.brushStyle == 'Pen':
+                    painter.setPen(QPen(self.brushColor, self.brushSize, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+                    painter.drawLine(self.lastPoint, event.pos())
+                elif self.brushStyle == 'Spray':
+                    painter.setPen(QPen(self.brushColor, 1))
+                    for n in range(self.brushSize**2 // 10):
+                        x = random.gauss(0, self.brushSize // 4)
+                        y = random.gauss(0, self.brushSize // 4)
+                        painter.drawPoint(event.x() + x, event.y() + y)
+                elif self.brushStyle == 'Eraser':
+                    painter.setBrush(Qt.white)
+                    painter.setPen(Qt.white)
+                    dx = dy = self.brushSize
+                    x1 = event.x() - dx / 2
+                    y1 = event.y() - dy / 2
+                    x2 = self.lastPoint.x() - dx / 2
+                    y2 = self.lastPoint.y() - dy / 2
+                    polygons = [QPolygon([QPoint(x1, y1), QPoint(x2, y2), QPoint(x2+dx, y2+dy), QPoint(x1+dx, y1+dy)]),
+                                QPolygon([QPoint(x1, y1+dy), QPoint(x2, y2+dy), QPoint(x2+dx, y2), QPoint(x1+dx, y1)])]
+                    for polygon in polygons:
+                        painter.drawPolygon(polygon)
+                    painter.drawRect(x1, y1, dx, dy)
+                self.lastPoint = event.pos()
+                self.update()
+            elif self.brushStyle in ['Rectangle', 'Circle', 'Line']:
+                self.image = self.backUp.copy(self.image.rect())
+                painter = QPainter(self.image)
                 painter.setPen(QPen(self.brushColor, self.brushSize, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-                painter.drawLine(self.lastPoint, event.pos())
-            elif self.brushStyle == 'Spray':
-                painter.setPen(QPen(self.brushColor, 1))
-                for n in range(self.brushSize**2 // 20):
-                    x = random.gauss(0, self.brushSize // 4)
-                    y = random.gauss(0, self.brushSize // 4)
-                    painter.drawPoint(event.x() + x, event.y() + y)
-            self.lastPoint = event.pos()
-            self.update()
+                if self.brushStyle == 'Rectangle':
+                    x, y = self.lastPoint.x(), self.lastPoint.y()
+                    dx, dy = event.pos().x() - x, event.pos().y() - y
+                    if self.fullFill:
+                        painter.setBrush(self.brushColor)
+                    painter.drawRect(x, y, dx, dy)
+                elif self.brushStyle == 'Circle':
+                    x, y = self.lastPoint.x(), self.lastPoint.y()
+                    dx, dy = event.pos().x() - x, event.pos().y() - y
+                    if self.fullFill:
+                        painter.setBrush(self.brushColor)
+                    painter.drawEllipse(x, y, dx, dy)
+                elif self.brushStyle == 'Line':
+                    x1, y1 = self.lastPoint.x(), self.lastPoint.y()
+                    x2, y2 = event.x(), event.y()
+                    painter.drawLine(x1, y1, x2, y2)
+                self.update()
 
     def mouseReleaseEvent(self, event):
+        self.lastPoint = event.pos()
         if event.button() == Qt.LeftButton:
             self.drawing = False
         self.transaction.addData(self.image.copy(self.image.rect()))
@@ -132,14 +196,17 @@ class Window(QMainWindow):
     def save(self):
         filePath, type = QFileDialog.getSaveFileName(self, "Save Image", "",
                                                "PNG(*.png);;JPEG(*.jpg *.jpeg);;All Files(*.*) ")
-
         if filePath == "":
             return
+
         self.image.save(filePath)
 
     def load(self):
         filePath, type = QFileDialog.getOpenFileName(self, "Import Image", "",
                                                "PNG(*.png);;JPEG(*.jpg *.jpeg);;All Files(*.*) ")
+        if filePath == "":
+            return
+
         newImage = QImage(filePath)
         self.resize(newImage.width(), newImage.height())
         self.image = newImage
@@ -148,16 +215,14 @@ class Window(QMainWindow):
     def clear(self):
         self.image.fill(Qt.white)
         self.update()
+        self.transaction.addData(self.image.copy(self.image.rect()))
 
-    def undo(self):
-        data = self.transaction.undo()
-        if data:
-            self.resize(data.width(), data.height())
-            self.image = data.copy()
-            self.update()
-
-    def redo(self):
-        data = self.transaction.redo()
+    def undoAndRedo(self):
+        command = self.sender().text()
+        if command == 'Undo':
+            data = self.transaction.undo()
+        elif command == 'Redo':
+            data = self.transaction.redo()
         if data:
             self.resize(data.width(), data.height())
             self.image = data.copy()
@@ -186,10 +251,22 @@ class Window(QMainWindow):
     def changeBrush(self):
         brushType = self.sender().text()
         self.brushStyle = brushType
-        print(self.brushStyle)
+
+    def getDrawingOption(self):
+        self.fullFill = self.figureSetting.getSetting()
 
     def pickColor(self):
         self.brushColor = QColorDialog.getColor()
+
+    def searchImage(self):
+        imgSearchDlg = ImageFromWeb()
+        imgSearchDlg.exec_()
+        self.image = imgSearchDlg.getImage()
+        while self.image.width() >= 1920 or self.image.height() >= 1080:
+            self.image.scaledToHeight(self.image.height() / 2)
+        self.resize(self.image.width(), self.image.height())
+        self.update()
+        self.transaction.addData(self.image.copy(self.image.rect()))
 
     def resizeEvent(self, e):
         resizedImage = QImage(e.size(), QImage.Format_RGB32)
