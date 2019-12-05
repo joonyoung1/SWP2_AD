@@ -24,7 +24,6 @@ class Window(QMainWindow):
         self.scrollArea = QScrollArea()
         self.scrollArea.setBackgroundRole(QPalette.Dark)
         self.scrollArea.setWidget(self.imagelabel)
-        self.scrollArea.setVisible(True)
 
         self.setCentralWidget(self.scrollArea)
 
@@ -32,7 +31,7 @@ class Window(QMainWindow):
         self.setWindowTitle(title)
         self.resize(width+2, height+22)
 
-        self.image = QImage(self.size(), QImage.Format_RGB32)
+        self.image = QImage(width - 1,height - 1, QImage.Format_RGB32)
         self.image.fill(Qt.white)
 
         self.drawing = False
@@ -112,19 +111,20 @@ class Window(QMainWindow):
 
 
     def mousePressEvent(self, event):
+        print(self.imagelabel.x(), event.pos().x())
         if event.button() == Qt.LeftButton:
             self.drawing = True
             self.lastPoint = event.pos()
             painter = QPainter(self.image)
             if self.brushStyle == 'Pen':
                 painter.setPen(QPen(self.brushColor, self.brushSize, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-                painter.drawPoint(int((1/self.scaleFactor)*(event.pos().x())), int((1/self.scaleFactor)*event.pos().y() - 23))
+                painter.drawPoint(int((1/self.scaleFactor)*event.x())-int(self.imagelabel.x()/self.scaleFactor) , int((1/self.scaleFactor)*(event.y() - 23))-int(self.imagelabel.y()/self.scaleFactor))
             elif self.brushStyle == 'Spray':
                 painter.setPen(QPen(self.brushColor, 1))
                 for n in range(self.brushSize**2 // 20):
                     x = random.gauss(0, self.brushSize // 4)
                     y = random.gauss(0, self.brushSize // 4)
-                    painter.drawPoint(int((1/self.scaleFactor)*(event.x() + x)), int((1/self.scaleFactor)*(event.y() + y - 23)))
+                    painter.drawPoint(int((1/self.scaleFactor)*(event.x() + x))-int(self.imagelabel.x()/self.scaleFactor), int((1/self.scaleFactor)*(event.y() + y - 23))-int(self.imagelabel.y()/self.scaleFactor))
             self.update()
 
     def mouseMoveEvent(self, event):
@@ -132,13 +132,13 @@ class Window(QMainWindow):
             painter = QPainter(self.image)
             if self.brushStyle == 'Pen':
                 painter.setPen(QPen(self.brushColor, self.brushSize, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-                painter.drawLine(int((1/self.scaleFactor)*self.lastPoint.x()), int((1/self.scaleFactor)*(self.lastPoint.y()-23)), int((1/self.scaleFactor)*event.x()) , int((1/self.scaleFactor)*(event.y() - 23)))
+                painter.drawLine(int((1/self.scaleFactor)*self.lastPoint.x())-int(self.imagelabel.x()/self.scaleFactor), int((1/self.scaleFactor)*(self.lastPoint.y()-23))-int(self.imagelabel.y()/self.scaleFactor), int((1/self.scaleFactor)*event.x())-int(self.imagelabel.x()/self.scaleFactor) , int((1/self.scaleFactor)*(event.y() - 23))-int(self.imagelabel.y()/self.scaleFactor))
             elif self.brushStyle == 'Spray':
                 painter.setPen(QPen(self.brushColor, 1))
                 for n in range(self.brushSize**2 // 20):
                     x = random.gauss(0, self.brushSize // 4)
                     y = random.gauss(0, self.brushSize // 4)
-                    painter.drawPoint(int((1/self.scaleFactor)*(event.x() + x)), int((1/self.scaleFactor)*(event.y() + y-23)))
+                    painter.drawPoint(int((1/self.scaleFactor)*(event.x() + x))-int(self.imagelabel.x()/self.scaleFactor), int((1/self.scaleFactor)*(event.y() + y-23))-int(self.imagelabel.y()/self.scaleFactor))
             self.lastPoint = event.pos()
             self.update()
 
