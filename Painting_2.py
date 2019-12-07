@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QMainWindow, QApplication, QAction, QWidgetAction, QFileDialog, QColorDialog
-from PyQt5.QtGui import QImage, QPainter, QPen, QTransform, QPolygon
+from PyQt5.QtGui import QImage, QPainter, QPen, QTransform, QPolygon, QClipboard
 from PyQt5.QtCore import Qt, QPoint
 from brushsizepicker import BrushSizePicker
 from transaction import Transaction
@@ -35,6 +35,8 @@ class Window(QMainWindow):
         self.brushStyle = 'Pen'
         self.fullFill = False
         self.backUp = None
+        self.clipboardImage = None
+        self.hdr = {'User-Agent': 'Mozilla/5.0'}
 
         mainMenu = self.menuBar()
         fileMenu = mainMenu.addMenu("File")
@@ -49,7 +51,8 @@ class Window(QMainWindow):
                            {'name': 'Load', 'shortcut': 'Ctrl+O', 'callback': self.load},
                            {'name': 'Clear', 'shortcut': 'Ctrl+C', 'callback': self.clear},
                            {'name': 'Undo', 'shortcut': 'Ctrl+Z', 'callback': self.undoAndRedo},
-                           {'name': 'Redo', 'shortcut': 'Ctrl+Shift+Z', 'callback': self.undoAndRedo}]
+                           {'name': 'Redo', 'shortcut': 'Ctrl+Shift+Z', 'callback': self.undoAndRedo},
+                           {'name': 'Paste', 'shortcut': 'Ctrl+V', 'callback': self.paste}]
 
         for setting in fileMenuSetting:
             action = QAction(setting['name'], self)
@@ -96,6 +99,7 @@ class Window(QMainWindow):
         mainMenu.addAction(imageSearch)
 
         self.transaction = Transaction(20, self.image.copy(self.image.rect()))
+        QApplication.clipboard().dataChanged.connect(self.copy)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -228,6 +232,15 @@ class Window(QMainWindow):
             self.image = data.copy()
             self.update()
 
+    def copy(self):
+        self.clipboardImage = QApplication.clipboard().image(QClipboard.Clipboard)
+
+    def paste(self):
+        if self.clipboardImage and not self.clipboardImage.isNull():
+            self.image = self.clipboardImage
+            self.resize(self.image.size())
+            self.update()
+
     def getSize(self):
         self.brushSize = self.sizeSlider.getSize()
 
@@ -259,14 +272,16 @@ class Window(QMainWindow):
         self.brushColor = QColorDialog.getColor()
 
     def searchImage(self):
-        imgSearchDlg = ImageFromWeb()
-        imgSearchDlg.exec_()
-        self.image = imgSearchDlg.getImage()
-        while self.image.width() >= 1920 or self.image.height() >= 1080:
-            self.image.scaledToHeight(self.image.height() / 2)
-        self.resize(self.image.width(), self.image.height())
-        self.update()
-        self.transaction.addData(self.image.copy(self.image.rect()))
+        imgSearchDialog = ImageFromWeb()
+        imgSearchDialog.exec_()
+        searchedImage = imgSearchDialog.image
+        if searchedImage:
+            self.image = searchedImage
+            while self.image.width() >= 1920 or self.image.height() >= 1080:
+                self.image = self.image.scaled(self.image.width() // 2, self.image.height() // 2, Qt.KeepAspectRatio)
+            self.resize(self.image.width(), self.image.height())
+            self.update()
+            self.transaction.addData(self.image.copy(self.image.rect()))
 
     def resizeEvent(self, e):
         resizedImage = QImage(e.size(), QImage.Format_RGB32)
@@ -289,8 +304,8 @@ class Window(QMainWindow):
             newImage = QImage(myUrl.toLocalFile())
         else:
             decoded = parse.parse_qs(myUrl.toString())
-            hdr = {'User-Agent': 'Mozilla/5.0'}
-            req = request.Request(decoded['https://www.google.com/imgres?imgurl'][0], headers=hdr)
+
+            req = request.Request(decoded['https://www.google.com/imgres?imgurl'][0], headers=self.hdr)
             newImage = QImage()
             newImage.loadFromData(request.urlopen(req).read())
 

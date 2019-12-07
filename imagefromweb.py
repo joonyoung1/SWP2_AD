@@ -1,11 +1,14 @@
-from PyQt5.QtWidgets import QDialog, QLineEdit, QVBoxLayout, QGridLayout, QHBoxLayout, QPushButton, QLabel
+from PyQt5.QtWidgets import QDialog, QLineEdit, QVBoxLayout, QGridLayout, QHBoxLayout, QPushButton, QLabel, QFrame
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QIcon, QPixmap, QImage, QPalette, QBrush
+from PyQt5.QtGui import QImage, QPalette, QBrush
 from bs4 import BeautifulSoup
 from urllib import request, parse
 from clicklabel import ClickLabel
 import threading
+from pprint import pprint
+from itertools import zip_longest
 import json
+
 
 class ImageFromWeb(QDialog):
     clicked = pyqtSignal()
@@ -18,23 +21,36 @@ class ImageFromWeb(QDialog):
         self.images = [0 for _ in range(10)]
         self.image = None
         self.page = 0
+        self.hdr = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11'}
+        self.loadedImageNum = 0
+        self.lock = threading.Lock()
+        self.threads = None
 
         gridLayout = QGridLayout()
+        gridLayout.setAlignment(Qt.AlignCenter)
         self.imageLabelList = []
         for i in range(10):
             imageLabel = ClickLabel()
             imageLabel.clicked.connect(self.imageSelected)
             imageLabel.setAutoFillBackground(True)
             imageLabel.setText(str(i))
+            box = QHBoxLayout()
+            box.addWidget(imageLabel)
+            frame = QFrame()
+            frame.setFixedSize(100, 100)
+            frame.setLayout(box)
+            frame.setLineWidth(5)
             self.imageLabelList.append(imageLabel)
-            gridLayout.addWidget(imageLabel, i // 5, i % 5, 1, 1)
+            gridLayout.addWidget(frame, i // 5, i % 5, 1, 1)
 
-        beforeButton = QPushButton('<')
-        beforeButton.setFixedSize(30, 30)
-        beforeButton.clicked.connect(self.turnOverPage)
-        nextButton = QPushButton('>')
-        nextButton.setFixedSize(30, 30)
-        nextButton.clicked.connect(self.turnOverPage)
+        self.beforeButton = QPushButton('<')
+        self.beforeButton.setFixedSize(30, 30)
+        self.beforeButton.setEnabled(False)
+        self.beforeButton.clicked.connect(self.turnOverPage)
+        self.nextButton = QPushButton('>')
+        self.nextButton.setFixedSize(30, 30)
+        self.nextButton.setEnabled(False)
+        self.nextButton.clicked.connect(self.turnOverPage)
 
         h1Box = QHBoxLayout()
         self.searchLabel = QLineEdit()
@@ -42,43 +58,65 @@ class ImageFromWeb(QDialog):
         enterButton = QPushButton('Search')
         enterButton.setFixedWidth(100)
         enterButton.clicked.connect(self.searchImage)
+        self.statusLabel = QLabel()
+        self.statusLabel.setFixedWidth(150)
         h1Box.addWidget(self.searchLabel)
         h1Box.addWidget(enterButton)
+        h1Box.addWidget(self.statusLabel)
 
         h2Box = QHBoxLayout()
-        h2Box.addWidget(beforeButton)
+        h2Box.addWidget(self.beforeButton)
         h2Box.addLayout(gridLayout)
-        h2Box.addWidget(nextButton)
+        h2Box.addWidget(self.nextButton)
 
         vBox = QVBoxLayout()
         vBox.addLayout(h1Box)
         vBox.addLayout(h2Box)
+
+        self.pageLabel = QLabel('1 / 10')
+        self.pageLabel.setAlignment(Qt.AlignCenter)
+        vBox.addWidget(self.pageLabel)
         vBox.setAlignment(self.searchLabel, Qt.AlignCenter)
 
         self.setLayout(vBox)
 
     def searchImage(self):
+        self.beforeButton.setEnabled(False)
+        self.nextButton.setEnabled(False)
+        self.statusLabel.setText('Searching Images...')
+        self.update()
+        self.page = 0
+        self.pageLabel.setText(str(self.page + 1) + ' / 10')
+        self.pageLabel.repaint()
         print('Image search started')
         query = self.searchLabel.text()
         query = '+'.join(query.split())
-        hdr = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11'}
-        url = "https://www.google.co.kr/search?q=" + parse.quote(query) + "&source=lnms&tbm=isch"
-        soup = BeautifulSoup(request.urlopen(request.Request(url, headers=hdr)), 'html.parser')
+        url = "https://www.google.com/search?q=" + parse.quote(query) + "&hl=en&tbm=isch"
+        soup = BeautifulSoup(request.urlopen(request.Request(url, headers=self.hdr)), 'html.parser')
         images = []
         self.imagesUrl = []
         for a in soup.find_all("div", {"class": "rg_meta"}):
             images.append(str(json.loads(a.text)["ou"]))
-        for i in range(10):
-            self.imagesUrl.append(images[i*10:i*10+10])
-        print(self.imagesUrl)
-        self.showImage()
+        if images:
+            pprint(images)
+            for i in range(10):
+                self.imagesUrl.append(images[i*10:i*10+10])
+            self.showImage()
+        else:
+            self.statusLabel.setText('Unexpected Error Occured!')
+            self.update()
         print('Image search finished')
 
     def imageSelected(self):
-        print(self.sender().text())
-        index = int(self.sender().text())
-        self.image = QImage(self.images[index])
-        self.close()
+        print(self.sender().text() + ' image selected')
+        for thread in self.threads:
+            thread.join()
+        try:
+            index = int(self.sender().text())
+            self.image = self.images[index]
+            self.close()
+        except:
+            pass
 
     def turnOverPage(self):
         if self.sender().text() == '<' and self.page > 0:
@@ -87,34 +125,60 @@ class ImageFromWeb(QDialog):
         elif self.sender().text() == '>' and self.page < 9:
             self.page += 1
             self.showImage()
-
-    def getImage(self):
-        return QImage(self.image)
+        else:
+            self.statusLabel.setText('End of page!')
+            self.update()
+        self.pageLabel.setText(str(self.page + 1) + ' / 10')
 
     def showImage(self):
+        self.statusLabel.setText('0% done...')
+        self.update()
+        self.beforeButton.setEnabled(False)
+        self.nextButton.setEnabled(False)
+        for label in self.imageLabelList:
+            empty = QPalette()
+            label.setPalette(empty)
+        self.loadedImageNum = 0
         print('showing Image')
         images = self.imagesUrl[self.page]
-        for index, (label, image) in enumerate(zip(self.imageLabelList, images)):
-            t = threading.Thread(target=self.loadImage, args=[label, image, index])
-            t.start()
+        self.threads = []
+        for index, (label, image) in enumerate(zip_longest(self.imageLabelList, images, fillvalue=None)):
+            self.threads.append(threading.Thread(target=self.loadImage, args=[label, image, index]))
+        for thread in self.threads:
+            thread.start()
 
     def loadImage(self, label, url, index):
         print('Thread ' + str(index) + ' started')
-        hdr = {'User-Agent': 'Mozilla/5.0'}
         label.setText(str(index))
         image = QImage()
         try:
-            image.loadFromData(request.urlopen(request.Request(url, headers=hdr)).read())
+            image.loadFromData(request.urlopen(request.Request(url, headers=self.hdr), timeout=2).read())
+            print('Thread ' + str(index) + ' succeeded')
+            self.images[index] = image
+            if image.isNull():
+                raise ValueError
+            image = image.scaled(100, 100, Qt.KeepAspectRatio)
+            label.setFixedSize(image.width(), image.height())
+            palette = QPalette()
+            palette.setBrush(label.backgroundRole(), QBrush(image))
+            label.setPalette(palette)
         except:
-            label.setText('e')
-        self.images[index] = image
-        image = image.scaled(100, 100, Qt.KeepAspectRatio)
-        label.resize(image.width(), image.height())
-        label.setFixedSize(image.width(), image.height())
-        palette = QPalette()
-        palette.setBrush(label.backgroundRole(), QBrush(image))
-        label.setPalette(palette)
-        print('Thread ' + str(index) + ' finished')
+            label.setText('Error!')
+            print('Thread ' + str(index) + ' failed')
+        self.lock.acquire()
+        self.loadedImageNum += 1
+        if self.loadedImageNum == 10:
+            text = 'Successfully done'
+            self.beforeButton.setEnabled(True)
+            self.nextButton.setEnabled(True)
+        else:
+            text = str(self.loadedImageNum*10) + '% done...'
+        self.updateStatus(text)
+        self.lock.release()
+
+    def updateStatus(self, text):
+        self.statusLabel.setText(text)
+        self.update()
 
     def mousePressEvent(self, event):
         self.clicked.emit()
