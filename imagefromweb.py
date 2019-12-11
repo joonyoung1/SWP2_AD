@@ -109,8 +109,9 @@ class ImageFromWeb(QDialog):
 
     def imageSelected(self):
         print(self.sender().text() + ' image selected')
-        for thread in self.threads:
-            thread.join()
+        if self.threads:
+            for thread in self.threads:
+                thread.join()
         try:
             index = int(self.sender().text())
             self.image = self.images[index]
