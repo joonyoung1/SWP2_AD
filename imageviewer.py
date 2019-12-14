@@ -1,27 +1,21 @@
-import os.path
-
-from PyQt5.QtCore import Qt, QRectF, pyqtSignal, QT_VERSION_STR, QSize, QPoint
+from PyQt5.QtCore import Qt, QRectF, QSize, QPoint, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap, QPainterPath, QTransform
-from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QFileDialog, QRubberBand
+from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene
 from transaction import Transaction
 from drawing import *
 from urllib import request, parse
 
+
 class ImageViewer(QGraphicsView):
-    leftMouseButtonPressed = pyqtSignal(float, float)
-    rightMouseButtonPressed = pyqtSignal(float, float)
-    leftMouseButtonReleased = pyqtSignal(float, float)
-    rightMouseButtonReleased = pyqtSignal(float, float)
-    leftMouseButtonDoubleClicked = pyqtSignal(float, float)
-    rightMouseButtonDoubleClicked = pyqtSignal(float, float)
+    update = pyqtSignal()
 
     def __init__(self):
-        QGraphicsView.__init__(self)
+        super().__init__()
 
         self.scene = QGraphicsScene()
         self.setScene(self.scene)
 
-        self._pixmapHandle = None
+        self.imageHandler = None
 
         self.aspectRatioMode = Qt.KeepAspectRatio
 
@@ -40,23 +34,22 @@ class ImageViewer(QGraphicsView):
         self.backUp = None
         self.clipboardImage = None
         self.startView()
-        self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
 
         self.hdr = {'User-Agent': 'Mozilla/5.0'}
         self.setAcceptDrops(True)
         self.transaction = Transaction(100, self.image().copy(self.image().rect()))
 
     def hasImage(self):
-        return self._pixmapHandle is not None
+        return self.imageHandler is not None
 
     def pixmap(self):
         if self.hasImage():
-            return self._pixmapHandle.pixmap()
+            return self.imageHandler.pixmap()
         return None
 
     def image(self):
         if self.hasImage():
-            return self._pixmapHandle.pixmap().toImage()
+            return self.imageHandler.pixmap().toImage()
         return None
 
     def setImage(self, image):
@@ -67,29 +60,20 @@ class ImageViewer(QGraphicsView):
         else:
             raise RuntimeError("ImageViewer.setImage: Argument must be a QImage or QPixmap.")
         if self.hasImage():
-            self._pixmapHandle.setPixmap(pixmap)
+            self.imageHandler.setPixmap(pixmap)
         else:
-            self._pixmapHandle = self.scene.addPixmap(pixmap)
+            self.imageHandler = self.scene.addPixmap(pixmap)
         self.setSceneRect(QRectF(pixmap.rect()))
-        self.updateViewer()
-
-    def loadImageFromFile(self, fileName=""):
-        if len(fileName) == 0:
-            if QT_VERSION_STR[0] == '4':
-                fileName = QFileDialog.getOpenFileName(self, "Open image file.")
-            elif QT_VERSION_STR[0] == '5':
-                fileName, dummy = QFileDialog.getOpenFileName(self, "Open image file.")
-        if len(fileName) and os.path.isfile(fileName):
-            image = QImage(fileName)
-            self.setImage(image)
 
     def updateViewer(self):
         if not self.hasImage():
             return
         if len(self.zoomStack) and self.sceneRect().contains(self.zoomStack[-1]):
+            print('yes')
             self.fitInView(self.zoomStack[-1], Qt.KeepAspectRatio)
         else:
             self.zoomStack = []
+            self.setSceneRect(QRectF(self.image().rect()))
             self.fitInView(self.sceneRect(), self.aspectRatioMode)
 
     def resizeEvent(self, event):
@@ -111,12 +95,10 @@ class ImageViewer(QGraphicsView):
                     self.setImage(drawSpray(self.image(), self.brushColor, self.brushSize, scenePos.x(), scenePos.y()))
                 elif self.brushStyle in ['Rectangle', 'Circle', 'Line']:
                     self.backUp = self.image().copy(self.image().rect())
-            self.leftMouseButtonPressed.emit(scenePos.x(), scenePos.y())
 
         elif event.button() == Qt.RightButton:
             self.canZoom = True
             self.setDragMode(QGraphicsView.RubberBandDrag)
-            self.rightMouseButtonPressed.emit(event.x(), event.y())
         QGraphicsView.mousePressEvent(self, event)
 
     def mouseMoveEvent(self, event):
@@ -147,7 +129,6 @@ class ImageViewer(QGraphicsView):
         if event.button() == Qt.LeftButton:
             self.drawing = False
             self.setDragMode(QGraphicsView.NoDrag)
-            self.leftMouseButtonReleased.emit(scenePos.x(), scenePos.y())
         elif event.button() == Qt.RightButton:
             if self.canZoom:
                 viewBBox = self.zoomStack[-1] if len(self.zoomStack) else self.sceneRect()
@@ -158,24 +139,21 @@ class ImageViewer(QGraphicsView):
                     self.updateViewer()
                 self.canZoom = False
             self.setDragMode(QGraphicsView.NoDrag)
-            self.rightMouseButtonReleased.emit(scenePos.x(), scenePos.y())
         if self.brushStyle == 'Eraser':
             self.setImage(drawEraser(self.image(), self.brushSize, scenePos.x(), scenePos.y(), scenePos.x(), scenePos.y()))
         self.transaction.addData(self.image().copy(self.image().rect()))
 
     def mouseDoubleClickEvent(self, event):
-        scenePos = self.mapToScene(event.pos())
-        if event.button() == Qt.LeftButton:
-            self.leftMouseButtonDoubleClicked.emit(scenePos.x(), scenePos.y())
-        elif event.button() == Qt.RightButton:
+        if event.button() == Qt.RightButton:
             self.zoomStack = []
             self.updateViewer()
-            self.rightMouseButtonDoubleClicked.emit(scenePos.x(), scenePos.y())
+            self.update.emit()
         QGraphicsView.mouseDoubleClickEvent(self, event)
 
     def startView(self):
         image = QImage(QSize(800, 600), QImage.Format_RGB32)
         image.fill(Qt.white)
+        self.resize(image.size())
         self.setImage(image)
 
     def clear(self):
@@ -184,6 +162,8 @@ class ImageViewer(QGraphicsView):
         image = QImage(QSize(width, height), QImage.Format_RGB32)
         image.fill(Qt.white)
         self.setImage(image)
+        self.zoomStack = []
+        self.updateViewer()
         self.transaction.addData(self.image().copy(self.image().rect()))
 
     def setBrushSize(self, brushSize):
@@ -205,6 +185,9 @@ class ImageViewer(QGraphicsView):
             self.setImage(self.image().mirrored(False, True))
         elif option == 'Horizontally':
             self.setImage(self.image().mirrored(True, False))
+        self.zoomStack = []
+        self.update.emit()
+        self.updateViewer()
 
     def rotateImage(self):
         angle = int(list(self.sender().text().split())[1])
@@ -212,6 +195,9 @@ class ImageViewer(QGraphicsView):
         transform.rotate(angle)
         self.setImage(self.image().transformed(transform))
         self.transaction.addData(self.image().copy(self.image().rect()))
+        self.zoomStack = []
+        self.update.emit()
+        self.updateViewer()
 
     def undoAndRedo(self):
         command = self.sender().text()
@@ -224,7 +210,6 @@ class ImageViewer(QGraphicsView):
 
     def dragEnterEvent(self, event):
         m = event.mimeData()
-        print(m.hasUrls())
         if m.hasUrls():
             event.accept()
         else:
@@ -244,20 +229,6 @@ class ImageViewer(QGraphicsView):
             newImage.loadFromData(request.urlopen(req).read())
         self.setImage(newImage)
 
-if __name__ == '__main__':
-    import sys
-
-    from PyQt5.QtWidgets import QApplication
-
-    def handleLeftClick(x, y):
-        row = int(y)
-        column = int(x)
-        print("Clicked on image pixel (row="+str(row)+", column="+str(column)+")")
-
-    app = QApplication(sys.argv)
-
-    viewer = QtImageViewer()
-    # viewer.loadImageFromFile()
-    viewer.leftMouseButtonPressed.connect(handleLeftClick)
-    viewer.show()
-    sys.exit(app.exec_())
+    def setNewImage(self, image):
+        self.resize(image.size())
+        self.setImage(image)

@@ -1,13 +1,12 @@
 from PyQt5.QtWidgets import QMainWindow, QApplication, QAction, QWidgetAction, QFileDialog, QColorDialog
 from PyQt5.QtGui import QImage, QClipboard
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QSize
 from brushsizepicker import BrushSizePicker
 from checkboxsetting import CheckboxSetting
 from imagefromweb import ImageFromWeb
 from imageviewer import ImageViewer
 from drawing import *
 import sys
-from urllib import parse, request
 
 
 class PaintApplication(QMainWindow):
@@ -21,8 +20,10 @@ class PaintApplication(QMainWindow):
         self.setWindowTitle(title)
 
         self.imageViewer = ImageViewer()
+        self.imageViewer.update.connect(self.updateSize)
         self.hdr = {'User-Agent': 'Mozilla/5.0'}
         self.setStyleSheet("QWidget {background-color: rgb(239, 235, 230);}")
+        self.clipboardImage = None
 
         mainMenu = self.menuBar()
         fileMenu = mainMenu.addMenu("File")
@@ -86,6 +87,7 @@ class PaintApplication(QMainWindow):
 
         QApplication.clipboard().dataChanged.connect(self.copy)
         self.setCentralWidget(self.imageViewer)
+        self.updateSize()
 
     def save(self):
         filePath, type = QFileDialog.getSaveFileName(self, "Save Image", "", "PNG(*.png);;JPEG(*.jpg *.jpeg);;All Files(*.*) ")
@@ -99,32 +101,16 @@ class PaintApplication(QMainWindow):
         if filePath == "":
             return
         newImage = QImage(filePath)
-        self.imageViewer.setImage(newImage)
-
-    def dragEnterEvent(self, e):
-        m = e.mimeData()
-        if m.hasUrls():
-            e.accept()
-        else:
-            e.ignore()
-
-    def dropEvent(self, e):
-        myUrl = e.mimeData().urls()[0]
-        if myUrl.isLocalFile():
-            newImage = QImage(myUrl.toLocalFile())
-        else:
-            decoded = parse.parse_qs(myUrl.toString())
-            req = request.Request(decoded['https://www.google.com/imgres?imgurl'][0], headers=self.hdr)
-            newImage = QImage()
-            newImage.loadFromData(request.urlopen(req).read())
-        self.imageViewer.setImage(newImage)
+        self.imageViewer.setNewImage(newImage)
+        self.updateSize()
 
     def copy(self):
         self.clipboardImage = QApplication.clipboard().image(QClipboard.Clipboard)
 
     def paste(self):
         if self.clipboardImage and not self.clipboardImage.isNull():
-            self.imageViewer.setImage(self.clipboardImage)
+            self.imageViewer.setNewImage(self.clipboardImage)
+        self.updateSize()
 
     def getDrawingOption(self):
         self.imageViewer.setFullFill(self.checkboxSetting.getSetting())
@@ -143,7 +129,18 @@ class PaintApplication(QMainWindow):
             self.image = searchedImage
             while self.image.width() >= 1920 or self.image.height() >= 1080:
                 self.image = self.image.scaled(self.image.width() // 2, self.image.height() // 2, Qt.KeepAspectRatio)
-            self.imageViewer.setImage(self.image)
+            self.imageViewer.setNewImage(self.image)
+        self.updateSize()
+
+    def updateSize(self):
+        self.resize(self.sizeHint())
+        print('after updateSize', self.size())
+
+    def sizeHint(self):
+        image = self.imageViewer.image()
+        width, height = image.width(), image.height()
+        print(width, height)
+        return QSize(width + 6, height + 27)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
