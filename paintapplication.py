@@ -57,16 +57,19 @@ class PaintApplication(QMainWindow):
             flipAction.triggered.connect(self.imageViewer.flip)
             modify.addAction(flipAction)
 
-        for brushType in ['Pen', 'Eraser', 'Spray', 'Move']:
+        for brushType in ['Pen', 'Eraser', 'Spray', 'Paint Bucket', 'Move']:
             brushAction = QAction(brushType, self)
             brushAction.triggered.connect(self.imageViewer.changeBrush)
             brushStyle.addAction(brushAction)
 
         drawingMenu.aboutToHide.connect(self.getDrawingOption)
-        optionSettingAction = QWidgetAction(self)
-        self.checkboxSetting = CheckboxSetting('Full Fill')
-        optionSettingAction.setDefaultWidget(self.checkboxSetting)
-        drawingMenu.addAction(optionSettingAction)
+        self.drawingOption = {}
+        for setting in ['Full Fill', 'Right Angle']:
+            optionSettingAction = QWidgetAction(self)
+            checkboxSetting = CheckboxSetting(setting)
+            optionSettingAction.setDefaultWidget(checkboxSetting)
+            drawingMenu.addAction(optionSettingAction)
+            self.drawingOption[setting] = checkboxSetting
 
         for figure in ['Rectangle', 'Circle', 'Line']:
             drawAction = QAction(figure, self)
@@ -93,7 +96,7 @@ class PaintApplication(QMainWindow):
         filePath, type = QFileDialog.getSaveFileName(self, "Save Image", "", "PNG(*.png);;JPEG(*.jpg *.jpeg);;All Files(*.*) ")
         if filePath == "":
             return
-        image = self.imageViewer.getImage()
+        image = self.imageViewer.image()
         image.save(filePath)
 
     def load(self):
@@ -113,7 +116,9 @@ class PaintApplication(QMainWindow):
         self.updateSize()
 
     def getDrawingOption(self):
-        self.imageViewer.setFullFill(self.checkboxSetting.getSetting())
+        fullFill = self.drawingOption['Full Fill'].getSetting()
+        rightAngle = self.drawingOption['Right Angle'].getSetting()
+        self.imageViewer.setDrawingOption(fullFill, rightAngle)
 
     def getSize(self):
         self.imageViewer.setBrushSize(self.sizeSlider.getSize())
@@ -130,16 +135,14 @@ class PaintApplication(QMainWindow):
             while self.image.width() >= 1920 or self.image.height() >= 1080:
                 self.image = self.image.scaled(self.image.width() // 2, self.image.height() // 2, Qt.KeepAspectRatio)
             self.imageViewer.setNewImage(self.image)
-        self.updateSize()
+            self.updateSize()
 
     def updateSize(self):
         self.resize(self.sizeHint())
-        print('after updateSize', self.size())
 
     def sizeHint(self):
         image = self.imageViewer.image()
         width, height = image.width(), image.height()
-        print(width, height)
         return QSize(width + 6, height + 27)
 
 if __name__ == '__main__':

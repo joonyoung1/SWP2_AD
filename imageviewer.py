@@ -31,6 +31,7 @@ class ImageViewer(QGraphicsView):
         self.lastPoint = QPoint()
         self.brushStyle = 'Pen'
         self.fullFill = False
+        self.rightAngle = False
         self.backUp = None
         self.clipboardImage = None
         self.startView()
@@ -69,7 +70,6 @@ class ImageViewer(QGraphicsView):
         if not self.hasImage():
             return
         if len(self.zoomStack) and self.sceneRect().contains(self.zoomStack[-1]):
-            print('yes')
             self.fitInView(self.zoomStack[-1], Qt.KeepAspectRatio)
         else:
             self.zoomStack = []
@@ -93,6 +93,8 @@ class ImageViewer(QGraphicsView):
                     self.setImage(drawEraser(self.image(), self.brushSize, scenePos.x(), scenePos.y(), scenePos.x(), scenePos.y()))
                 elif self.brushStyle == 'Spray':
                     self.setImage(drawSpray(self.image(), self.brushColor, self.brushSize, scenePos.x(), scenePos.y()))
+                elif self.brushStyle == 'Paint Bucket':
+                    self.setImage(drawPaintBucket(self.image(), self.brushColor, int(scenePos.x()), int(scenePos.y())))
                 elif self.brushStyle in ['Rectangle', 'Circle', 'Line']:
                     self.backUp = self.image().copy(self.image().rect())
 
@@ -115,7 +117,7 @@ class ImageViewer(QGraphicsView):
             elif self.brushStyle in ['Rectangle', 'Circle', 'Line']:
                 image = self.backUp.copy(self.image().rect())
                 if self.brushStyle == 'Rectangle':
-                    self.setImage(drawRectangle(image, self.brushColor, self.brushSize, self.lastPoint.x(), self.lastPoint.y(), scenePos.x(), scenePos.y(), self.fullFill))
+                    self.setImage(drawRectangle(image, self.brushColor, self.brushSize, self.lastPoint.x(), self.lastPoint.y(), scenePos.x(), scenePos.y(), self.fullFill, self.rightAngle))
                 elif self.brushStyle == 'Circle':
                     self.setImage(drawCircle(image, self.brushColor, self.brushSize, self.lastPoint.x(), self.lastPoint.y(), scenePos.x(), scenePos.y(), self.fullFill))
                 elif self.brushStyle == 'Line':
@@ -145,9 +147,7 @@ class ImageViewer(QGraphicsView):
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.RightButton:
-            self.zoomStack = []
-            self.updateViewer()
-            self.update.emit()
+            self.reset()
         QGraphicsView.mouseDoubleClickEvent(self, event)
 
     def startView(self):
@@ -162,8 +162,7 @@ class ImageViewer(QGraphicsView):
         image = QImage(QSize(width, height), QImage.Format_RGB32)
         image.fill(Qt.white)
         self.setImage(image)
-        self.zoomStack = []
-        self.updateViewer()
+        self.reset()
         self.transaction.addData(self.image().copy(self.image().rect()))
 
     def setBrushSize(self, brushSize):
@@ -176,8 +175,9 @@ class ImageViewer(QGraphicsView):
         brushStyle = self.sender().text()
         self.brushStyle = brushStyle
 
-    def setFullFill(self, fullFill):
+    def setDrawingOption(self, fullFill, rightAngle):
         self.fullFill = fullFill
+        self.rightAngle = rightAngle
 
     def flip(self):
         option = list(self.sender().text().split())[1]
@@ -185,9 +185,7 @@ class ImageViewer(QGraphicsView):
             self.setImage(self.image().mirrored(False, True))
         elif option == 'Horizontally':
             self.setImage(self.image().mirrored(True, False))
-        self.zoomStack = []
-        self.update.emit()
-        self.updateViewer()
+        self.reset()
 
     def rotateImage(self):
         angle = int(list(self.sender().text().split())[1])
@@ -195,9 +193,7 @@ class ImageViewer(QGraphicsView):
         transform.rotate(angle)
         self.setImage(self.image().transformed(transform))
         self.transaction.addData(self.image().copy(self.image().rect()))
-        self.zoomStack = []
-        self.update.emit()
-        self.updateViewer()
+        self.reset()
 
     def undoAndRedo(self):
         command = self.sender().text()
@@ -207,6 +203,7 @@ class ImageViewer(QGraphicsView):
             data = self.transaction.redo()
         if data:
             self.setImage(data.copy())
+        self.reset()
 
     def dragEnterEvent(self, event):
         m = event.mimeData()
@@ -221,14 +218,22 @@ class ImageViewer(QGraphicsView):
     def dropEvent(self, event):
         myUrl = event.mimeData().urls()[0]
         if myUrl.isLocalFile():
-            newImage = QImage(myUrl.toLocalFile())
+            image = QImage(myUrl.toLocalFile())
         else:
-            decoded = parse.parse_qs(myUrl.toString())
-            req = request.Request(decoded['https://www.google.com/imgres?imgurl'][0], headers=self.hdr)
-            newImage = QImage()
-            newImage.loadFromData(request.urlopen(req).read())
-        self.setImage(newImage)
+            try:
+                decoded = parse.parse_qs(myUrl.toString())
+                req = request.Request(decoded['https://www.google.com/imgres?imgurl'][0], headers=self.hdr)
+                image = QImage()
+                image.loadFromData(request.urlopen(req).read())
+            except:
+                return
+        self.setNewImage(image)
 
     def setNewImage(self, image):
         self.resize(image.size())
         self.setImage(image)
+
+    def reset(self):
+        self.zoomStack = []
+        self.updateViewer()
+        self.update.emit()

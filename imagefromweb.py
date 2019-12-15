@@ -5,7 +5,6 @@ from bs4 import BeautifulSoup
 from urllib import request, parse
 from clicklabel import ClickLabel
 import threading
-from pprint import pprint
 from itertools import zip_longest
 import json
 
@@ -21,7 +20,7 @@ class ImageFromWeb(QDialog):
         self.images = [0 for _ in range(10)]
         self.image = None
         self.page = 0
-        self.hdr = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11'}
+        self.hdr = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.95 Safari/537.36'}
         self.loadedImageNum = 0
         self.lock = threading.Lock()
         self.threads = None
@@ -88,27 +87,23 @@ class ImageFromWeb(QDialog):
         self.page = 0
         self.pageLabel.setText(str(self.page + 1) + ' / 10')
         self.pageLabel.repaint()
-        print('Image search started')
         query = self.searchLabel.text()
         query = '+'.join(query.split())
         url = "https://www.google.com/search?q=" + parse.quote(query) + "&hl=en&tbm=isch"
-        soup = BeautifulSoup(request.urlopen(request.Request(url, headers=self.hdr)), 'html.parser')
+        soup = BeautifulSoup(request.urlopen(request.Request(url, headers=self.hdr), timeout=2), 'html.parser')
         images = []
         self.imagesUrl = []
         for a in soup.find_all("div", {"class": "rg_meta"}):
             images.append(str(json.loads(a.text)["ou"]))
         if images:
-            pprint(images)
             for i in range(10):
                 self.imagesUrl.append(images[i*10:i*10+10])
             self.showImage()
         else:
             self.statusLabel.setText('Unexpected Error Occured!')
             self.update()
-        print('Image search finished')
 
     def imageSelected(self):
-        print(self.sender().text() + ' image selected')
         if self.threads:
             for thread in self.threads:
                 thread.join()
@@ -140,7 +135,6 @@ class ImageFromWeb(QDialog):
             empty = QPalette()
             label.setPalette(empty)
         self.loadedImageNum = 0
-        print('showing Image')
         images = self.imagesUrl[self.page]
         self.threads = []
         for index, (label, image) in enumerate(zip_longest(self.imageLabelList, images, fillvalue=None)):
@@ -149,12 +143,10 @@ class ImageFromWeb(QDialog):
             thread.start()
 
     def loadImage(self, label, url, index):
-        print('Thread ' + str(index) + ' started')
         label.setText(str(index))
         image = QImage()
         try:
-            image.loadFromData(request.urlopen(request.Request(url, headers=self.hdr), timeout=2).read())
-            print('Thread ' + str(index) + ' succeeded')
+            image.loadFromData(request.urlopen(request.Request(url, headers=self.hdr)).read())
             self.images[index] = image
             if image.isNull():
                 raise ValueError
@@ -163,9 +155,10 @@ class ImageFromWeb(QDialog):
             palette = QPalette()
             palette.setBrush(label.backgroundRole(), QBrush(image))
             label.setPalette(palette)
+        except ValueError:
+            label.setText('Null')
         except:
             label.setText('Error!')
-            print('Thread ' + str(index) + ' failed')
         self.lock.acquire()
         self.loadedImageNum += 1
         if self.loadedImageNum == 10:
