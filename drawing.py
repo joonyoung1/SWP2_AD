@@ -1,8 +1,7 @@
 from PyQt5.QtGui import QPainter, QPen, QPolygon, QBrush, QColor
 from PyQt5.QtCore import Qt, QPoint
 import random
-import numpy as np
-import time
+
 
 def drawRectangle(image, color, size, x1, y1, x2, y2, fill, rightAngle):
     painter = QPainter(image)
@@ -89,7 +88,6 @@ def drawPaintBucket(image, color, x, y):
     def getColor(x, y):
         i = (x + (y * width)) * 4
         return bytesImage[i: i + 3]
-    start = time.clock()
     painter = QPainter(image)
     painter.setPen(color)
     width = image.width()
@@ -100,7 +98,6 @@ def drawPaintBucket(image, color, x, y):
     color = bytes([color.blue(), color.green(), color.red()])
     bytesImage = image.bits().asstring(width * height * 4)
     baseColor = getColor(x, y)
-    print(baseColor, color)
     if baseColor == color:
         return image
     done = set()
@@ -120,6 +117,4 @@ def drawPaintBucket(image, color, x, y):
             if point not in done:
                 posStack.append(point)
                 done.add(point)
-    end = time.clock()
-    print(end - start, checked, len(done))
     return image

@@ -97,6 +97,8 @@ class PaintApplication(QMainWindow):
         if filePath == "":
             return
         image = self.imageViewer.image()
+        if '.' not in filePath:
+            filePath += '.png'
         image.save(filePath)
 
     def load(self):
