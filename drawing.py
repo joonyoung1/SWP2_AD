@@ -3,8 +3,9 @@ from PyQt5.QtCore import Qt, QPoint
 import random
 
 
-def drawRectangle(image, color, size, x1, y1, x2, y2, fill, rightAngle):
+def drawRectangle(image, color, size, x1, y1, x2, y2, fill, rightAngle, opacity):
     painter = QPainter(image)
+    painter.setOpacity(opacity / 100)
     if rightAngle:
         painter.setPen(color)
         painter.setBrush(color)
@@ -31,8 +32,9 @@ def drawRectangle(image, color, size, x1, y1, x2, y2, fill, rightAngle):
     return image
 
 
-def drawCircle(image, color, size, x1, y1, x2, y2, fill):
+def drawCircle(image, color, size, x1, y1, x2, y2, fill, opacity):
     painter = QPainter(image)
+    painter.setOpacity(opacity / 100)
     painter.setPen(QPen(color, size, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
     if fill:
         painter.setBrush(color)
@@ -40,15 +42,17 @@ def drawCircle(image, color, size, x1, y1, x2, y2, fill):
     return image
 
 
-def drawPoint(image, color, size, x, y):
+def drawPoint(image, color, size, x, y, opacity):
     painter = QPainter(image)
+    painter.setOpacity(opacity / 100)
     painter.setPen(QPen(color, size, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
     painter.drawPoint(x, y)
     return image
 
 
-def drawLine(image, color, size, x1, y1, x2, y2):
+def drawLine(image, color, size, x1, y1, x2, y2, opacity):
     painter = QPainter(image)
+    painter.setOpacity(opacity / 100)
     painter.setPen(QPen(color, size, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
     painter.drawLine(x1, y1, x2, y2)
     return image
@@ -73,8 +77,9 @@ def drawEraser(image, size, x1, y1, x2, y2):
     return image
 
 
-def drawSpray(image, color, size, x, y):
+def drawSpray(image, color, size, x, y, opacity):
     painter = QPainter(image)
+    painter.setOpacity(opacity / 100)
     painter.setPen(QPen(color, 1))
     for n in range(size ** 2 // 10):
         dx = random.gauss(0, size // 4)
@@ -83,12 +88,13 @@ def drawSpray(image, color, size, x, y):
     return image
 
 
-def drawPaintBucket(image, color, x, y):
+def drawPaintBucket(image, color, x, y, opacity):
 
     def getColor(x, y):
         i = (x + (y * width)) * 4
         return bytesImage[i: i + 3]
     painter = QPainter(image)
+    painter.setOpacity(opacity / 100)
     painter.setPen(color)
     width = image.width()
     height = image.height()

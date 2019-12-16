@@ -8,6 +8,7 @@ from urllib import request, parse
 
 class ImageViewer(QGraphicsView):
     update = pyqtSignal()
+    mouseMoved = pyqtSignal(int, int)
 
     def __init__(self):
         super().__init__()
@@ -27,6 +28,7 @@ class ImageViewer(QGraphicsView):
 
         self.drawing = False
         self.brushSize = 2
+        self.brushOpacity = 100
         self.brushColor = Qt.black
         self.lastPoint = QPoint()
         self.brushStyle = 'Pen'
@@ -35,10 +37,12 @@ class ImageViewer(QGraphicsView):
         self.backUp = None
         self.clipboardImage = None
         self.startView()
+        self.setMouseTracking(True)
 
         self.hdr = {'User-Agent': 'Mozilla/5.0'}
         self.setAcceptDrops(True)
         self.transaction = Transaction(100, self.image().copy(self.image().rect()))
+
 
     def hasImage(self):
         return self.imageHandler is not None
@@ -67,8 +71,6 @@ class ImageViewer(QGraphicsView):
         self.setSceneRect(QRectF(pixmap.rect()))
 
     def updateViewer(self):
-        if not self.hasImage():
-            return
         if len(self.zoomStack) and self.sceneRect().contains(self.zoomStack[-1]):
             self.fitInView(self.zoomStack[-1], Qt.KeepAspectRatio)
         else:
@@ -88,13 +90,13 @@ class ImageViewer(QGraphicsView):
             else:
                 self.drawing = True
                 if self.brushStyle == 'Pen':
-                    self.setImage(drawPoint(self.image(), self.brushColor, self.brushSize, scenePos.x(), scenePos.y()))
+                    self.setImage(drawPoint(self.image(), self.brushColor, self.brushSize, scenePos.x(), scenePos.y(), self.brushOpacity))
                 elif self.brushStyle == 'Eraser':
                     self.setImage(drawEraser(self.image(), self.brushSize, scenePos.x(), scenePos.y(), scenePos.x(), scenePos.y()))
                 elif self.brushStyle == 'Spray':
-                    self.setImage(drawSpray(self.image(), self.brushColor, self.brushSize, scenePos.x(), scenePos.y()))
+                    self.setImage(drawSpray(self.image(), self.brushColor, self.brushSize, scenePos.x(), scenePos.y(), self.brushOpacity))
                 elif self.brushStyle == 'Paint Bucket':
-                    self.setImage(drawPaintBucket(self.image(), self.brushColor, int(scenePos.x()), int(scenePos.y())))
+                    self.setImage(drawPaintBucket(self.image(), self.brushColor, int(scenePos.x()), int(scenePos.y()), self.brushOpacity))
                 elif self.brushStyle in ['Rectangle', 'Circle', 'Line']:
                     self.backUp = self.image().copy(self.image().rect())
 
@@ -104,33 +106,34 @@ class ImageViewer(QGraphicsView):
         QGraphicsView.mousePressEvent(self, event)
 
     def mouseMoveEvent(self, event):
+        scenePos = self.mapToScene(event.pos())
         if self.drawing:
-            scenePos = self.mapToScene(event.pos())
             if self.brushStyle in ['Pen', 'Eraser', 'Spray']:
                 if self.brushStyle == 'Pen':
-                    self.setImage(drawLine(self.image(), self.brushColor, self.brushSize, self.lastPoint.x(), self.lastPoint.y(), scenePos.x(), scenePos.y()))
+                    self.setImage(drawLine(self.image(), self.brushColor, self.brushSize, self.lastPoint.x(), self.lastPoint.y(), scenePos.x(), scenePos.y(), self.brushOpacity))
                 elif self.brushStyle == 'Eraser':
                     self.setImage(drawEraser(self.image(), self.brushSize, self.lastPoint.x(), self.lastPoint.y(), scenePos.x(), scenePos.y()))
                 elif self.brushStyle == 'Spray':
-                    self.setImage(drawSpray(self.image(), self.brushColor, self.brushSize, scenePos.x(), scenePos.y()))
+                    self.setImage(drawSpray(self.image(), self.brushColor, self.brushSize, scenePos.x(), scenePos.y(), self.brushOpacity))
                 self.lastPoint = scenePos
             elif self.brushStyle in ['Rectangle', 'Circle', 'Line']:
                 image = self.backUp.copy(self.image().rect())
                 if self.brushStyle == 'Rectangle':
-                    self.setImage(drawRectangle(image, self.brushColor, self.brushSize, self.lastPoint.x(), self.lastPoint.y(), scenePos.x(), scenePos.y(), self.fullFill, self.rightAngle))
+                    self.setImage(drawRectangle(image, self.brushColor, self.brushSize, self.lastPoint.x(), self.lastPoint.y(), scenePos.x(), scenePos.y(), self.fullFill, self.rightAngle, self.brushOpacity))
                 elif self.brushStyle == 'Circle':
-                    self.setImage(drawCircle(image, self.brushColor, self.brushSize, self.lastPoint.x(), self.lastPoint.y(), scenePos.x(), scenePos.y(), self.fullFill))
+                    self.setImage(drawCircle(image, self.brushColor, self.brushSize, self.lastPoint.x(), self.lastPoint.y(), scenePos.x(), scenePos.y(), self.fullFill, self.brushOpacity))
                 elif self.brushStyle == 'Line':
-                    self.setImage(drawLine(image, self.brushColor, self.brushSize, self.lastPoint.x(), self.lastPoint.y(), scenePos.x(), scenePos.y()))
+                    self.setImage(drawLine(image, self.brushColor, self.brushSize, self.lastPoint.x(), self.lastPoint.y(), scenePos.x(), scenePos.y(), self.brushOpacity))
         else:
             QGraphicsView.mouseMoveEvent(self, event)
+        self.mouseMoved.emit(scenePos.x(), scenePos.y())
 
     def mouseReleaseEvent(self, event):
         QGraphicsView.mouseReleaseEvent(self, event)
-        scenePos = self.mapToScene(event.pos())
         if event.button() == Qt.LeftButton:
             self.drawing = False
             self.setDragMode(QGraphicsView.NoDrag)
+            self.transaction.addData(self.image().copy(self.image().rect()))
         elif event.button() == Qt.RightButton:
             if self.canZoom:
                 viewBBox = self.zoomStack[-1] if len(self.zoomStack) else self.sceneRect()
@@ -141,14 +144,20 @@ class ImageViewer(QGraphicsView):
                     self.updateViewer()
                 self.canZoom = False
             self.setDragMode(QGraphicsView.NoDrag)
-        if self.brushStyle == 'Eraser':
-            self.setImage(drawEraser(self.image(), self.brushSize, scenePos.x(), scenePos.y(), scenePos.x(), scenePos.y()))
-        self.transaction.addData(self.image().copy(self.image().rect()))
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.RightButton:
-            self.reset()
+            if self.zoomStack:
+                self.zoomStack = []
+                self.updateViewer()
+            else:
+                self.reset()
         QGraphicsView.mouseDoubleClickEvent(self, event)
+
+    def wheelEvent(self, event):
+        scenePos = self.mapToScene(event.pos())
+        self.mouseMoved.emit(scenePos.x(), scenePos.y())
+        QGraphicsView.wheelEvent(self, event)
 
     def startView(self):
         image = QImage(QSize(800, 600), QImage.Format_RGB32)
@@ -167,6 +176,9 @@ class ImageViewer(QGraphicsView):
 
     def setBrushSize(self, brushSize):
         self.brushSize = brushSize
+
+    def setBrushOpacity(self, brushOpacity):
+        self.brushOpacity = brushOpacity
 
     def setBrushColor(self, brushColor):
         self.brushColor = brushColor
@@ -232,6 +244,7 @@ class ImageViewer(QGraphicsView):
     def setNewImage(self, image):
         self.resize(image.size())
         self.setImage(image)
+        self.transaction.addData(self.image().copy(self.image().rect()))
 
     def reset(self):
         self.zoomStack = []

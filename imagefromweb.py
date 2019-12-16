@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QDialog, QLineEdit, QVBoxLayout, QGridLayout, QHBoxLayout, QPushButton, QLabel, QFrame
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QImage, QPalette, QBrush
+from PyQt5.QtGui import QImage, QPalette, QBrush, QFont
 from bs4 import BeautifulSoup
 from urllib import request, parse
 from clicklabel import ClickLabel
@@ -30,6 +30,10 @@ class ImageFromWeb(QDialog):
         self.imageLabelList = []
         for i in range(10):
             imageLabel = ClickLabel()
+            imageLabel.setFixedSize(100, 100)
+            font = QFont()
+            font.setPointSize(1)
+            imageLabel.setFont(font)
             imageLabel.clicked.connect(self.imageSelected)
             imageLabel.setAutoFillBackground(True)
             imageLabel.setText(str(i))
@@ -85,7 +89,6 @@ class ImageFromWeb(QDialog):
         self.statusLabel.setText('Searching Images...')
         self.update()
         self.page = 0
-        self.pageLabel.setText(str(self.page + 1) + ' / 10')
         self.pageLabel.repaint()
         query = self.searchLabel.text()
         query = '+'.join(query.split())
@@ -147,18 +150,16 @@ class ImageFromWeb(QDialog):
         image = QImage()
         try:
             image.loadFromData(request.urlopen(request.Request(url, headers=self.hdr)).read())
-            self.images[index] = image
             if image.isNull():
-                raise ValueError
+                raise Exception
+            self.images[index] = image
             image = image.scaled(100, 100, Qt.KeepAspectRatio)
             label.setFixedSize(image.width(), image.height())
             palette = QPalette()
             palette.setBrush(label.backgroundRole(), QBrush(image))
             label.setPalette(palette)
-        except ValueError:
-            label.setText('Null')
         except:
-            label.setText('Error!')
+            pass
         self.lock.acquire()
         self.loadedImageNum += 1
         if self.loadedImageNum == 10:

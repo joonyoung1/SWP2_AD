@@ -1,7 +1,7 @@
-from PyQt5.QtWidgets import QMainWindow, QApplication, QAction, QWidgetAction, QFileDialog, QColorDialog
+from PyQt5.QtWidgets import QMainWindow, QApplication, QAction, QWidgetAction, QFileDialog, QColorDialog, QLabel, QVBoxLayout, QWidget
 from PyQt5.QtGui import QImage, QClipboard
 from PyQt5.QtCore import Qt, QSize
-from brushsizepicker import BrushSizePicker
+from brushsettingpicker import BrushSettingPicker
 from checkboxsetting import CheckboxSetting
 from imagefromweb import ImageFromWeb
 from imageviewer import ImageViewer
@@ -29,7 +29,7 @@ class PaintApplication(QMainWindow):
         fileMenu = mainMenu.addMenu("File")
         modify = mainMenu.addMenu("Modify")
         brushStyle = mainMenu.addMenu("Brush Style")
-        brushSize = mainMenu.addMenu("Brush Size")
+        brushSetting = mainMenu.addMenu("Brush Setting")
         colorPicker = QAction('Color Picker', self)
         drawingMenu = mainMenu.addMenu("Drawing")
         imageSearch = QAction('Image Search', self)
@@ -76,11 +76,14 @@ class PaintApplication(QMainWindow):
             drawAction.triggered.connect(self.imageViewer.changeBrush)
             drawingMenu.addAction(drawAction)
 
-        brushSize.aboutToHide.connect(self.getSize)
-        sizePickAction = QWidgetAction(self)
-        self.sizeSlider = BrushSizePicker(1, 200, 2)
-        sizePickAction.setDefaultWidget(self.sizeSlider)
-        brushSize.addAction(sizePickAction)
+        brushSetting.aboutToHide.connect(self.getSetting)
+        self.settingWidget = {}
+        for minValue, maxValue, baseValue, name in [(1, 200, 2, 'Brush Size'), (1, 100, 100, 'Brush Opacity')]:
+            settingPickAction = QWidgetAction(self)
+            settingWidget = BrushSettingPicker(minValue, maxValue, baseValue, name)
+            settingPickAction.setDefaultWidget(settingWidget)
+            self.settingWidget[name] = settingWidget
+            brushSetting.addAction(settingPickAction)
 
         colorPicker.triggered.connect(self.pickColor)
         mainMenu.addAction(colorPicker)
@@ -88,8 +91,18 @@ class PaintApplication(QMainWindow):
         imageSearch.triggered.connect(self.searchImage)
         mainMenu.addAction(imageSearch)
 
+        image = self.imageViewer.image()
+        self.statusBar = QLabel('Width=' + str(image.width()) + ', Height=' + str(image.height()) + ', (0, 0)')
+        self.imageViewer.mouseMoved.connect(self.updateStatus)
+
+        vBox = QVBoxLayout()
+        vBox.addWidget(self.imageViewer)
+        vBox.addWidget(self.statusBar)
+
         QApplication.clipboard().dataChanged.connect(self.copy)
-        self.setCentralWidget(self.imageViewer)
+        widget = QWidget()
+        widget.setLayout(vBox)
+        self.setCentralWidget(widget)
         self.updateSize()
 
     def save(self):
@@ -122,8 +135,9 @@ class PaintApplication(QMainWindow):
         rightAngle = self.drawingOption['Right Angle'].getSetting()
         self.imageViewer.setDrawingOption(fullFill, rightAngle)
 
-    def getSize(self):
-        self.imageViewer.setBrushSize(self.sizeSlider.getSize())
+    def getSetting(self):
+        self.imageViewer.setBrushSize(self.settingWidget['Brush Size'].getValue())
+        self.imageViewer.setBrushOpacity(self.settingWidget['Brush Opacity'].getValue())
 
     def pickColor(self):
         self.imageViewer.setBrushColor(QColorDialog.getColor())
@@ -142,10 +156,17 @@ class PaintApplication(QMainWindow):
     def updateSize(self):
         self.resize(self.sizeHint())
 
-    def sizeHint(self):
+    def updateStatus(self, x, y):
         image = self.imageViewer.image()
-        width, height = image.width(), image.height()
-        return QSize(width + 6, height + 27)
+        width = str(image.width())
+        height = str(image.height())
+        self.statusBar.setText('Width=' + width + ', Height=' + height + ', (' + str(x) + ', ' + str(y) + ')')
+
+    def sizeHint(self):
+        screen = self.imageViewer.image()
+        width, height = screen.width(), screen.height()
+        return QSize(width + 24, height + 65)
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
