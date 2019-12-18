@@ -3,46 +3,41 @@ from PyQt5.QtCore import Qt, QPoint
 import random
 
 
-def drawRectangle(image, color, size, x1, y1, x2, y2, fill, rightAngle, opacity):
+def drawRectangle(image, color, size, x1, y1, x2, y2, fill, opacity):
+    x1 = int(x1)
+    y1 = int(y1)
+    x2 = int(x2)
+    y2 = int(y2)
+    dx = dy = size // 2
     painter = QPainter(image)
     painter.setOpacity(opacity / 100)
-    if rightAngle:
-        painter.setPen(color)
-        painter.setBrush(color)
-        d = size / 2
-        if size % 2 == 1:
-            x1 += 1
-            x2 += 1
-        for x in [x1, x2]:
-            for y in [y1, y2]:
-                polygon = []
-                dx = [x - d, x - d, x + d - 1, x + d - 1]
-                dy = [y - d, y + d - 1, y + d - 1, y - d]
-                for i in range(4):
-                    if size % 2 == 0:
-                        polygon.append(QPoint(dx[i], dy[i]))
-                    else:
-                        polygon.append(QPoint(dx[i] + 1, dy[i] + 1))
-                painter.drawPolygon(QPolygon(polygon))
-        painter.setBrush(QBrush())
-    painter.setPen(QPen(color, size, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-    if fill:
-        painter.setBrush(color)
-    painter.drawRect(x1, y1, x2 - x1, y2 - y1)
+    painter.setPen(QPen(color, size, Qt.SolidLine, Qt.RoundCap, Qt.MiterJoin))
+    if x1 != x2 and y1 != y2:
+        if fill:
+            painter.fillRect(x1, y1, x2 - x1, y2 - y1, QBrush(color))
+        else:
+            painter.drawRect(x1, y1, x2 - x1, y2 - y1)
     return image
 
 
 def drawCircle(image, color, size, x1, y1, x2, y2, fill, opacity):
+    x1 = int(x1)
+    y1 = int(y1)
+    x2 = int(x2)
+    y2 = int(y2)
     painter = QPainter(image)
     painter.setOpacity(opacity / 100)
-    painter.setPen(QPen(color, size, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
     if fill:
         painter.setBrush(color)
+    else:
+        painter.setPen(QPen(color, size, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
     painter.drawEllipse(x1, y1, x2 - x1, y2 - y1)
     return image
 
 
 def drawPoint(image, color, size, x, y, opacity):
+    x = int(x)
+    y = int(y)
     painter = QPainter(image)
     painter.setOpacity(opacity / 100)
     painter.setPen(QPen(color, size, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
@@ -51,6 +46,10 @@ def drawPoint(image, color, size, x, y, opacity):
 
 
 def drawLine(image, color, size, x1, y1, x2, y2, opacity):
+    x1 = int(x1)
+    y1 = int(y1)
+    x2 = int(x2)
+    y2 = int(y2)
     painter = QPainter(image)
     painter.setOpacity(opacity / 100)
     painter.setPen(QPen(color, size, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
@@ -58,15 +57,33 @@ def drawLine(image, color, size, x1, y1, x2, y2, opacity):
     return image
 
 
+def drawFountain(image, color, size, x1, y1, x2, y2, opacity):
+    x1 = int(x1) - size // 2
+    y1 = int(y1) - size // 2
+    x2 = int(x2) - size // 2
+    y2 = int(y2) - size // 2
+    painter = QPainter(image)
+    painter.setPen(color)
+    painter.setOpacity(opacity / 100)
+    painter.setBrush(color)
+    dx = dy = size
+    painter.drawPolygon(QPolygon([QPoint(x1 + dx, y1), QPoint(x1, y1 + dy), QPoint(x2, y2 + dy), QPoint(x2 + dx, y2)]))
+    return image
+
+
 def drawEraser(image, size, x1, y1, x2, y2):
+    x1 = int(x1)
+    y1 = int(y1)
+    x2 = int(x2)
+    y2 = int(y2)
     painter = QPainter(image)
     painter.setBrush(Qt.white)
     painter.setPen(Qt.white)
     dx = dy = size
-    x1 = x1 - dx / 2
-    y1 = y1 - dy / 2
-    x2 = x2 - dx / 2
-    y2 = y2 - dy / 2
+    x1 = x1 - dx // 2
+    y1 = y1 - dy // 2
+    x2 = x2 - dx // 2
+    y2 = y2 - dy // 2
     painter.drawRect(x1, y1, dx, dx)
     polygons = [QPolygon([QPoint(x1, y1), QPoint(x1, y1 + dy), QPoint(x2, y2 + dy), QPoint(x2, y2)]),
                 QPolygon([QPoint(x1, y1 + dy), QPoint(x1 + dx, y1 + dy), QPoint(x2 + dx, y2 + dy), QPoint(x2, y2 + dy)]),
@@ -78,6 +95,8 @@ def drawEraser(image, size, x1, y1, x2, y2):
 
 
 def drawSpray(image, color, size, x, y, opacity):
+    x = int(x)
+    y = int(y)
     painter = QPainter(image)
     painter.setOpacity(opacity / 100)
     painter.setPen(QPen(color, 1))

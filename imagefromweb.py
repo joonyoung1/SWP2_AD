@@ -93,7 +93,11 @@ class ImageFromWeb(QDialog):
         query = self.searchLabel.text()
         query = '+'.join(query.split())
         url = "https://www.google.com/search?q=" + parse.quote(query) + "&hl=en&tbm=isch"
-        soup = BeautifulSoup(request.urlopen(request.Request(url, headers=self.hdr), timeout=2), 'html.parser')
+        try:
+            soup = BeautifulSoup(request.urlopen(request.Request(url, headers=self.hdr), timeout=2), 'html.parser')
+        except:
+            self.statusLabel.setText('Network Connection Error!')
+            return
         images = []
         self.imagesUrl = []
         for a in soup.find_all("div", {"class": "rg_meta"}):
@@ -159,7 +163,7 @@ class ImageFromWeb(QDialog):
             palette.setBrush(label.backgroundRole(), QBrush(image))
             label.setPalette(palette)
         except:
-            pass
+            label.setText('Error')
         self.lock.acquire()
         self.loadedImageNum += 1
         if self.loadedImageNum == 10:

@@ -33,7 +33,6 @@ class ImageViewer(QGraphicsView):
         self.lastPoint = QPoint()
         self.brushStyle = 'Pen'
         self.fullFill = False
-        self.rightAngle = False
         self.backUp = None
         self.clipboardImage = None
         self.startView()
@@ -43,14 +42,8 @@ class ImageViewer(QGraphicsView):
         self.setAcceptDrops(True)
         self.transaction = Transaction(100, self.image().copy(self.image().rect()))
 
-
     def hasImage(self):
         return self.imageHandler is not None
-
-    def pixmap(self):
-        if self.hasImage():
-            return self.imageHandler.pixmap()
-        return None
 
     def image(self):
         if self.hasImage():
@@ -91,12 +84,14 @@ class ImageViewer(QGraphicsView):
                 self.drawing = True
                 if self.brushStyle == 'Pen':
                     self.setImage(drawPoint(self.image(), self.brushColor, self.brushSize, scenePos.x(), scenePos.y(), self.brushOpacity))
-                elif self.brushStyle == 'Eraser':
-                    self.setImage(drawEraser(self.image(), self.brushSize, scenePos.x(), scenePos.y(), scenePos.x(), scenePos.y()))
+                elif self.brushStyle == 'Fountain Pen':
+                    self.setImage(drawFountain(self.image(), self.brushColor, self.brushSize, self.lastPoint.x(), self.lastPoint.y(), scenePos.x(), scenePos.y(), self.brushOpacity))
                 elif self.brushStyle == 'Spray':
                     self.setImage(drawSpray(self.image(), self.brushColor, self.brushSize, scenePos.x(), scenePos.y(), self.brushOpacity))
                 elif self.brushStyle == 'Paint Bucket':
                     self.setImage(drawPaintBucket(self.image(), self.brushColor, int(scenePos.x()), int(scenePos.y()), self.brushOpacity))
+                elif self.brushStyle == 'Eraser':
+                    self.setImage(drawEraser(self.image(), self.brushSize, scenePos.x(), scenePos.y(), scenePos.x(), scenePos.y()))
                 elif self.brushStyle in ['Rectangle', 'Circle', 'Line']:
                     self.backUp = self.image().copy(self.image().rect())
 
@@ -108,18 +103,20 @@ class ImageViewer(QGraphicsView):
     def mouseMoveEvent(self, event):
         scenePos = self.mapToScene(event.pos())
         if self.drawing:
-            if self.brushStyle in ['Pen', 'Eraser', 'Spray']:
+            if self.brushStyle in ['Pen', 'Fountain Pen', 'Eraser', 'Spray']:
                 if self.brushStyle == 'Pen':
                     self.setImage(drawLine(self.image(), self.brushColor, self.brushSize, self.lastPoint.x(), self.lastPoint.y(), scenePos.x(), scenePos.y(), self.brushOpacity))
-                elif self.brushStyle == 'Eraser':
-                    self.setImage(drawEraser(self.image(), self.brushSize, self.lastPoint.x(), self.lastPoint.y(), scenePos.x(), scenePos.y()))
+                elif self.brushStyle == 'Fountain Pen':
+                    self.setImage(drawFountain(self.image(), self.brushColor, self.brushSize, self.lastPoint.x(), self.lastPoint.y(), scenePos.x(), scenePos.y(), self.brushOpacity))
                 elif self.brushStyle == 'Spray':
                     self.setImage(drawSpray(self.image(), self.brushColor, self.brushSize, scenePos.x(), scenePos.y(), self.brushOpacity))
+                elif self.brushStyle == 'Eraser':
+                    self.setImage(drawEraser(self.image(), self.brushSize, self.lastPoint.x(), self.lastPoint.y(), scenePos.x(), scenePos.y()))
                 self.lastPoint = scenePos
             elif self.brushStyle in ['Rectangle', 'Circle', 'Line']:
                 image = self.backUp.copy(self.image().rect())
                 if self.brushStyle == 'Rectangle':
-                    self.setImage(drawRectangle(image, self.brushColor, self.brushSize, self.lastPoint.x(), self.lastPoint.y(), scenePos.x(), scenePos.y(), self.fullFill, self.rightAngle, self.brushOpacity))
+                    self.setImage(drawRectangle(image, self.brushColor, self.brushSize, self.lastPoint.x(), self.lastPoint.y(), scenePos.x(), scenePos.y(), self.fullFill, self.brushOpacity))
                 elif self.brushStyle == 'Circle':
                     self.setImage(drawCircle(image, self.brushColor, self.brushSize, self.lastPoint.x(), self.lastPoint.y(), scenePos.x(), scenePos.y(), self.fullFill, self.brushOpacity))
                 elif self.brushStyle == 'Line':
@@ -158,6 +155,8 @@ class ImageViewer(QGraphicsView):
         scenePos = self.mapToScene(event.pos())
         self.mouseMoved.emit(scenePos.x(), scenePos.y())
         QGraphicsView.wheelEvent(self, event)
+        if event.buttons() == Qt.LeftButton:
+            self.mouseMoveEvent(event)
 
     def startView(self):
         image = QImage(QSize(800, 600), QImage.Format_RGB32)
@@ -187,9 +186,8 @@ class ImageViewer(QGraphicsView):
         brushStyle = self.sender().text()
         self.brushStyle = brushStyle
 
-    def setDrawingOption(self, fullFill, rightAngle):
+    def setFullFill(self, fullFill):
         self.fullFill = fullFill
-        self.rightAngle = rightAngle
 
     def flip(self):
         option = list(self.sender().text().split())[1]
@@ -207,6 +205,12 @@ class ImageViewer(QGraphicsView):
         self.transaction.addData(self.image().copy(self.image().rect()))
         self.reset()
 
+    def invertColor(self):
+        image = self.image()
+        image.invertPixels()
+        self.setImage(image)
+        self.transaction.addData(self.image().copy(self.image().rect()))
+
     def undoAndRedo(self):
         command = self.sender().text()
         if command == 'Undo':
@@ -215,7 +219,7 @@ class ImageViewer(QGraphicsView):
             data = self.transaction.redo()
         if data:
             self.setImage(data.copy())
-        self.reset()
+            self.fitInView(self.sceneRect(), self.aspectRatioMode)
 
     def dragEnterEvent(self, event):
         m = event.mimeData()
@@ -242,7 +246,6 @@ class ImageViewer(QGraphicsView):
         self.setNewImage(image)
 
     def setNewImage(self, image):
-        self.resize(image.size())
         self.setImage(image)
         self.transaction.addData(self.image().copy(self.image().rect()))
 
