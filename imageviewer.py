@@ -16,15 +16,13 @@ class ImageViewer(QGraphicsView):
         self.scene = QGraphicsScene()
         self.setScene(self.scene)
 
-        self.imageHandler = None
-
         self.aspectRatioMode = Qt.KeepAspectRatio
-
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
         self.zoomStack = []
         self.canZoom = False
+        self.imageHandler = None
 
         self.drawing = False
         self.brushSize = 2
@@ -34,12 +32,13 @@ class ImageViewer(QGraphicsView):
         self.brushStyle = 'Pen'
         self.fullFill = False
         self.backUp = None
+
         self.clipboardImage = None
-        self.startView()
         self.setMouseTracking(True)
+        self.setAcceptDrops(True)
 
         self.hdr = {'User-Agent': 'Mozilla/5.0'}
-        self.setAcceptDrops(True)
+        self.startView()
         self.transaction = Transaction(100, self.image().copy(self.image().rect()))
 
     def hasImage(self):
@@ -51,12 +50,7 @@ class ImageViewer(QGraphicsView):
         return None
 
     def setImage(self, image):
-        if type(image) is QPixmap:
-            pixmap = image
-        elif type(image) is QImage:
-            pixmap = QPixmap.fromImage(image)
-        else:
-            raise RuntimeError("ImageViewer.setImage: Argument must be a QImage or QPixmap.")
+        pixmap = QPixmap.fromImage(image)
         if self.hasImage():
             self.imageHandler.setPixmap(pixmap)
         else:
@@ -195,7 +189,7 @@ class ImageViewer(QGraphicsView):
             self.setImage(self.image().mirrored(False, True))
         elif option == 'Horizontally':
             self.setImage(self.image().mirrored(True, False))
-        self.reset()
+        self.updateViewer()
 
     def rotateImage(self):
         angle = int(list(self.sender().text().split())[1])
@@ -203,7 +197,7 @@ class ImageViewer(QGraphicsView):
         transform.rotate(angle)
         self.setImage(self.image().transformed(transform))
         self.transaction.addData(self.image().copy(self.image().rect()))
-        self.reset()
+        self.updateViewer()
 
     def invertColor(self):
         image = self.image()
@@ -247,6 +241,7 @@ class ImageViewer(QGraphicsView):
 
     def setNewImage(self, image):
         self.setImage(image)
+        self.reset()
         self.transaction.addData(self.image().copy(self.image().rect()))
 
     def reset(self):

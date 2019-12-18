@@ -24,6 +24,7 @@ class ImageFromWeb(QDialog):
         self.loadedImageNum = 0
         self.lock = threading.Lock()
         self.threads = None
+        self.setWindowTitle('Search Image')
 
         gridLayout = QGridLayout()
         gridLayout.setAlignment(Qt.AlignCenter)

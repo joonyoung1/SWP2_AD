@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import QMainWindow, QApplication, QAction, QWidgetAction, QFileDialog, QColorDialog, QLabel, QVBoxLayout, QWidget
 from PyQt5.QtGui import QImage, QClipboard
 from PyQt5.QtCore import Qt, QSize
-from brushsettingpicker import BrushSettingPicker
+from brushsettingslider import BrushSettingSlider
 from checkboxsetting import CheckboxSetting
 from imagefromweb import ImageFromWeb
 from imageviewer import ImageViewer
@@ -24,6 +24,7 @@ class PaintApplication(QMainWindow):
         self.hdr = {'User-Agent': 'Mozilla/5.0'}
         self.setStyleSheet("QWidget {background-color: rgb(239, 235, 230);}")
         self.clipboardImage = None
+        QApplication.clipboard().dataChanged.connect(self.copy)
 
         mainMenu = self.menuBar()
         fileMenu = mainMenu.addMenu("File")
@@ -47,46 +48,60 @@ class PaintApplication(QMainWindow):
             action.triggered.connect(setting['callback'])
             fileMenu.addAction(action)
 
-        for angle in [90, 180, 270]:
-            rotateAction = QAction("Rotate " + str(angle), self)
-            rotateAction.triggered.connect(self.imageViewer.rotateImage)
-            modify.addAction(rotateAction)
+        modifyMenuSetting = [{'name': 'Rotate 90', 'shortcut': 'Ctrl+R', 'callback': self.imageViewer.rotateImage},
+                             {'name': 'Rotate 180', 'shortcut': None, 'callback': self.imageViewer.rotateImage},
+                             {'name': 'Rotate 270', 'shortcut': None, 'callback': self.imageViewer.rotateImage},
+                             {'name': 'Flip Vertically', 'shortcut': 'Ctrl+Down', 'callback': self.imageViewer.flip},
+                             {'name': 'Flip Horizontally', 'shortcut': 'Ctrl+Right', 'callback': self.imageViewer.flip},
+                             {'name': 'Invert Color', 'shortcut': 'Ctrl+I', 'callback': self.imageViewer.invertColor}]
 
-        for flip in ['Vertically', 'Horizontally']:
-            flipAction = QAction("filp " + flip, self)
-            flipAction.triggered.connect(self.imageViewer.flip)
-            modify.addAction(flipAction)
+        for setting in modifyMenuSetting:
+            action = QAction(setting['name'], self)
+            if setting['shortcut']:
+                action.setShortcut(setting['shortcut'])
+            action.triggered.connect(setting['callback'])
+            modify.addAction(action)
 
-        invertColorAction = QAction("Invert Color", self)
-        invertColorAction.triggered.connect(self.imageViewer.invertColor)
-        modify.addAction(invertColorAction)
+        brushMenuSetting = [{'name': 'Pen', 'shortcut': 'Ctrl+P'},
+                            {'name': 'Fountain Pen', 'shortcut': 'Ctrl+F'},
+                            {'name': 'Spray', 'shortcut': 'Ctrl+Y'},
+                            {'name': 'Paint Bucket', 'shortcut': 'Ctrl+B'},
+                            {'name': 'Eraser', 'shortcut': 'Ctrl+E'},
+                            {'name': 'Move', 'shortcut': 'Ctrl+M'}]
 
-        for brushType in ['Pen', 'Fountain Pen', 'Spray', 'Paint Bucket', 'Eraser', 'Move']:
-            brushAction = QAction(brushType, self)
-            brushAction.triggered.connect(self.imageViewer.changeBrush)
-            brushStyle.addAction(brushAction)
+        for setting in brushMenuSetting:
+            action = QAction(setting['name'], self)
+            action.setShortcut(setting['shortcut'])
+            action.triggered.connect(self.imageViewer.changeBrush)
+            brushStyle.addAction(action)
 
         drawingMenu.aboutToHide.connect(self.getDrawingOption)
-        self.drawingOption = {}
-        for setting in ['Full Fill']:
-            optionSettingAction = QWidgetAction(self)
-            checkboxSetting = CheckboxSetting(setting)
-            optionSettingAction.setDefaultWidget(checkboxSetting)
-            drawingMenu.addAction(optionSettingAction)
-            self.drawingOption[setting] = checkboxSetting
+        optionSettingAction = QWidgetAction(self)
+        checkboxSetting = CheckboxSetting('Full Fill')
+        optionSettingAction.setDefaultWidget(checkboxSetting)
+        drawingMenu.addAction(optionSettingAction)
+        self.drawingOption = checkboxSetting
 
-        for figure in ['Rectangle', 'Circle', 'Line']:
-            drawAction = QAction(figure, self)
-            drawAction.triggered.connect(self.imageViewer.changeBrush)
-            drawingMenu.addAction(drawAction)
+        figureSetting = [{'name': 'Rectangle', 'shortcut': 'Shift+R'},
+                         {'name': 'Circle', 'shortcut': 'Shift+C'},
+                         {'name': 'Line', 'shortcut': 'Shift+L'}]
+
+        for setting in figureSetting:
+            action = QAction(setting['name'], self)
+            action.setShortcut(setting['shortcut'])
+            action.triggered.connect(self.imageViewer.changeBrush)
+            drawingMenu.addAction(action)
+
+        sliderSetting = [{'name': 'Brush Size', 'min': 1, 'max': 200, 'base': 2},
+                         {'name': 'Brush Opacity', 'min': 1, 'max': 100, 'base': 100}]
 
         brushSetting.aboutToHide.connect(self.getSetting)
         self.settingWidget = {}
-        for minValue, maxValue, baseValue, name in [(1, 200, 2, 'Brush Size'), (1, 100, 100, 'Brush Opacity')]:
+        for setting in sliderSetting:
             settingPickAction = QWidgetAction(self)
-            settingWidget = BrushSettingPicker(minValue, maxValue, baseValue, name)
+            settingWidget = BrushSettingSlider(setting['min'], setting['max'], setting['base'], setting['name'])
             settingPickAction.setDefaultWidget(settingWidget)
-            self.settingWidget[name] = settingWidget
+            self.settingWidget[setting['name']] = settingWidget
             brushSetting.addAction(settingPickAction)
 
         colorPicker.triggered.connect(self.pickColor)
@@ -103,7 +118,6 @@ class PaintApplication(QMainWindow):
         vBox.addWidget(self.imageViewer)
         vBox.addWidget(self.statusBar)
 
-        QApplication.clipboard().dataChanged.connect(self.copy)
         widget = QWidget()
         widget.setLayout(vBox)
         self.setCentralWidget(widget)
@@ -124,8 +138,6 @@ class PaintApplication(QMainWindow):
             return
         newImage = QImage(filePath)
         self.imageViewer.setNewImage(newImage)
-        if not self.isMaximized():
-            self.updateSize()
 
     def copy(self):
         self.clipboardImage = QApplication.clipboard().image(QClipboard.Clipboard)
@@ -133,11 +145,9 @@ class PaintApplication(QMainWindow):
     def paste(self):
         if self.clipboardImage and not self.clipboardImage.isNull():
             self.imageViewer.setNewImage(self.clipboardImage)
-        if not self.isMaximized():
-            self.updateSize()
 
     def getDrawingOption(self):
-        fullFill = self.drawingOption['Full Fill'].getSetting()
+        fullFill = self.drawingOption.getSetting()
         self.imageViewer.setFullFill(fullFill)
 
     def getSetting(self):
@@ -156,8 +166,6 @@ class PaintApplication(QMainWindow):
             while self.image.width() >= 1920 or self.image.height() >= 1080:
                 self.image = self.image.scaled(self.image.width() // 2, self.image.height() // 2, Qt.KeepAspectRatio)
             self.imageViewer.setNewImage(self.image)
-            if not self.isMaximized():
-                self.updateSize()
 
     def updateSize(self):
         if not self.isMaximized():
